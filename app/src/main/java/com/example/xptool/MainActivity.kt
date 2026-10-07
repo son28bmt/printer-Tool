@@ -134,6 +134,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        InfoTestPage.stopStressTest()
         try {
             udp.closeNetSocket()
             multicastLock?.release()
@@ -144,6 +145,7 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        InfoTestPage.stopStressTest()
         if (!currentPageIsHome) showHome() else super.onBackPressed()
     }
 
@@ -507,7 +509,14 @@ class MainActivity : Activity() {
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
+        b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
     }
+    }
+
+    private fun pageInfoTest() {
+        showPage("8. Thông tin & thử máy", false) { body ->
+            InfoTestPage.buildView(this, body) { msg -> log(msg) }
+        }
     }
 
     private fun pageDiagnostics() = showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
