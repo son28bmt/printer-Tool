@@ -427,6 +427,21 @@ class MainActivity : Activity() {
                         sendPrintData("In thử ${p.name}", getReceiptDemoBytes())
                     }
                 }
+                val btnPaper = Button(this).apply {
+                    text = "Khổ ${p.paperWidth}mm"
+                    textSize = 12f
+                    isAllCaps = false
+                    setOnClickListener {
+                        p.paperWidth = if (p.paperWidth == 58) 80 else 58
+                        if (p.id == PrinterManager.activePrinterId) {
+                            paperWidth = p.paperWidth
+                        }
+                        PrinterManager.saveAll(this@MainActivity)
+                        savePrinter()
+                        log("Đã chuyển khổ giấy máy in ${p.name} sang ${p.paperWidth}mm")
+                        showHome()
+                    }
+                }
                 val btnRename = Button(this).apply {
                     text = "Đổi tên"
                     textSize = 12f
@@ -466,6 +481,7 @@ class MainActivity : Activity() {
                 }
 
                 rowBtns.addView(btnUse)
+                rowBtns.addView(btnPaper)
                 rowBtns.addView(btnTest)
                 rowBtns.addView(btnRename)
                 rowBtns.addView(btnDel)

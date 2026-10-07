@@ -239,6 +239,15 @@ object DiagnosticHelper {
                 )
             )
 
+            reportStep(
+                DiagnosticStepResult(
+                    stepIndex = 5,
+                    title = "5. Tìm máy in theo MAC",
+                    isOk = true,
+                    message = "Bỏ qua (kết nối TCP ${targetPrinter.ip}:${targetPrinter.port} đã hoạt động bình thường)."
+                )
+            )
+
             // Bước 6: Trạng thái ESC/POS giấy & nắp
             var paperStateMsg: String? = null
             try {
