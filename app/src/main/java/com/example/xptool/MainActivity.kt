@@ -511,6 +511,7 @@ class MainActivity : Activity() {
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
         b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
         b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
+        b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
     }
     }
 
@@ -523,6 +524,12 @@ class MainActivity : Activity() {
     private fun pagePrinterSettings() {
         showPage("9. Cài đặt máy in", false) { body ->
             PrinterSettingsPage.buildView(this, body, { label, data -> sendPrintData(label, data) }, { msg -> log(msg) })
+        }
+    }
+
+    private fun pagePrintBridge() {
+        showPage("10. Cầu nối in (Print Bridge)", false) { body ->
+            PrintBridgePage.buildView(this, body) { msg -> log(msg) }
         }
     }
 
