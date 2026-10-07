@@ -859,32 +859,44 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------ SAMPLE GENERATORS
 
+    private fun removeAccents(src: String): String {
+        val temp = java.text.Normalizer.normalize(src, java.text.Normalizer.Form.NFD)
+        val pattern = java.util.regex.Pattern.compile("\\p{InCombiningDiacriticalMarks}+")
+        return pattern.matcher(temp).replaceAll("")
+            .replace('Đ', 'D')
+            .replace('đ', 'd')
+    }
+
     private fun getReceiptDemoBytes(): ByteArray {
         val b = ByteArrayOutputStream()
+        fun w(str: String) {
+            b.write(removeAccents(str).toByteArray(Charsets.US_ASCII))
+        }
+
         b.write(bytes(0x1B, 0x40)) // ESC @ Init
         b.write(bytes(0x1B, 0x61, 0x01)) // Center
         b.write(bytes(0x1D, 0x21, 0x11)) // Double size
-        b.write("CỬA HÀNG XPTOOL\n".toByteArray(Charsets.UTF_8))
+        w("CỬA HÀNG XPTOOL\n")
         b.write(bytes(0x1D, 0x21, 0x00)) // Normal size
-        b.write("ĐC: 123 Đường ABC, Hà Nội\n".toByteArray(Charsets.UTF_8))
-        b.write("SĐT: 0987.654.321\n".toByteArray(Charsets.UTF_8))
-        b.write("--------------------------------\n".toByteArray(Charsets.UTF_8))
+        w("ĐC: 123 Đường ABC, Hà Nội\n")
+        w("SĐT: 0987.654.321\n")
+        w("--------------------------------\n")
         b.write(bytes(0x1B, 0x61, 0x00)) // Left
-        b.write("HÓA ĐƠN BÁN HÀNG #001\n".toByteArray(Charsets.UTF_8))
-        b.write("Ngày: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}\n".toByteArray(Charsets.UTF_8))
-        b.write("--------------------------------\n".toByteArray(Charsets.UTF_8))
-        b.write("Sản phẩm             SL   Thành tiền\n".toByteArray(Charsets.UTF_8))
-        b.write("1. Máy in Xprinter   1    1.250.000đ\n".toByteArray(Charsets.UTF_8))
-        b.write("2. Giấy in K80x45    10     150.000đ\n".toByteArray(Charsets.UTF_8))
-        b.write("3. Tem nhãn 50x30    5      200.000đ\n".toByteArray(Charsets.UTF_8))
-        b.write("--------------------------------\n".toByteArray(Charsets.UTF_8))
+        w("HÓA ĐƠN BÁN HÀNG #001\n")
+        w("Ngày: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}\n")
+        w("--------------------------------\n")
+        w("Sản phẩm             SL   Thành tiền\n")
+        w("1. Máy in Xprinter   1    1.250.000đ\n")
+        w("2. Giấy in K80x45    10     150.000đ\n")
+        w("3. Tem nhãn 50x30    5      200.000đ\n")
+        w("--------------------------------\n")
         b.write(bytes(0x1B, 0x61, 0x02)) // Right
         b.write(bytes(0x1D, 0x21, 0x01)) // Height double
-        b.write("TỔNG TIỀN: 1.600.000đ\n".toByteArray(Charsets.UTF_8))
+        w("TỔNG TIỀN: 1.600.000đ\n")
         b.write(bytes(0x1D, 0x21, 0x00))
-        b.write("--------------------------------\n".toByteArray(Charsets.UTF_8))
+        w("--------------------------------\n")
         b.write(bytes(0x1B, 0x61, 0x01)) // Center
-        b.write("Cảm ơn & Hẹn gặp lại quý khách!\n\n\n".toByteArray(Charsets.UTF_8))
+        w("Cảm ơn & Hẹn gặp lại quý khách!\n\n\n")
         b.write(CUT)
         return b.toByteArray()
     }
@@ -893,10 +905,9 @@ class MainActivity : Activity() {
         val b = ByteArrayOutputStream()
         b.write(bytes(0x1B, 0x40))
         b.write(bytes(0x1B, 0x61, 0x01)) // Center
-        b.write("IN MÃ VẠCH THỬ NGHIỆM\n\n".toByteArray(Charsets.UTF_8))
+        b.write("IN MA VACH THU NGHIEM\n\n".toByteArray(Charsets.US_ASCII))
         if (isQr) {
-            // GS ( k command for QR Code
-            val data = content.toByteArray(Charsets.UTF_8)
+            val data = content.toByteArray(Charsets.US_ASCII)
             val len = data.size + 3
             val pL = (len and 0xFF).toByte()
             val pH = ((len shr 8) and 0xFF).toByte()
@@ -904,31 +915,33 @@ class MainActivity : Activity() {
             b.write(data)
             b.write(byteArrayOf(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30)) // Print QR
         } else {
-            // GS k CODE128
             b.write(byteArrayOf(0x1D, 0x68, 0x50)) // Height 80
             b.write(byteArrayOf(0x1D, 0x77, 0x02)) // Width 2
             b.write(byteArrayOf(0x1D, 0x48, 0x02)) // HRI below
-            val data = content.toByteArray(Charsets.US_ASCII)
+            val data = removeAccents(content).toByteArray(Charsets.US_ASCII)
             b.write(byteArrayOf(0x1D, 0x6B, 0x49, data.size.toByte()))
             b.write(data)
         }
-        b.write("\n\n\n".toByteArray(Charsets.UTF_8))
+        b.write("\n\n\n".toByteArray(Charsets.US_ASCII))
         b.write(CUT)
         return b.toByteArray()
     }
 
     private fun getTsplLabelBytes(title: String, price: String, code: String): ByteArray {
+        val t = removeAccents(title)
+        val p = removeAccents(price)
+        val c = removeAccents(code)
         val cmd = """
 SIZE 50 mm, 30 mm
 GAP 2 mm, 0 mm
 CLS
-TEXT 50,30,"3",0,1,1,"$title"
-TEXT 50,70,"2",0,1,1,"$price"
-BARCODE 50,110,"128",60,1,0,2,2,"$code"
+TEXT 50,30,"3",0,1,1,"$t"
+TEXT 50,70,"2",0,1,1,"$p"
+BARCODE 50,110,"128",60,1,0,2,2,"$c"
 PRINT 1,1
 
 """.trimIndent()
-        return cmd.toByteArray(Charsets.UTF_8)
+        return cmd.toByteArray(Charsets.US_ASCII)
     }
 
     // ------------------------------------------------------------ HELPERS
