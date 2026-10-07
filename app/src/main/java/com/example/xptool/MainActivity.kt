@@ -512,6 +512,7 @@ class MainActivity : Activity() {
         b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
         b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
         b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
+        b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
     }
     }
 
@@ -530,6 +531,12 @@ class MainActivity : Activity() {
     private fun pagePrintBridge() {
         showPage("10. Cầu nối in (Print Bridge)", false) { body ->
             PrintBridgePage.buildView(this, body) { msg -> log(msg) }
+        }
+    }
+
+    private fun pageNotificationPrint() {
+        showPage("11. Tự động in từ thông báo", false) { body ->
+            NotificationPrintPage.buildView(this, body) { msg -> log(msg) }
         }
     }
 

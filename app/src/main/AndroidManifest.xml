@@ -55,5 +55,16 @@
             android:name=".PrintBridgeService"
             android:foregroundServiceType="connectedDevice"
             android:exported="false" />
+
+        <!-- Service lắng nghe thông báo ứng dụng (Giai đoạn 5) -->
+        <service
+            android:name=".OrderNotificationListenerService"
+            android:label="XP Tool - Tự động in từ thông báo"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>
