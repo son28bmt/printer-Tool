@@ -1,5 +1,6 @@
 package com.example.xptool
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -11,7 +12,6 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.core.app.NotificationCompat
 import net.posprinter.IConnectListener
 import net.posprinter.IDeviceConnection
 import net.posprinter.POSConnect
@@ -135,13 +135,31 @@ class PrintBridgeService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notifBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+        @Suppress("DEPRECATION")
+        val notifBuilder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            Notification.Builder(this)
+        }
+
+        val actionStop = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
+                "Dừng",
+                pStop
+            ).build()
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Action(android.R.drawable.ic_menu_close_clear_cancel, "Dừng", pStop)
+        }
+
+        notifBuilder
             .setContentTitle("Cầu nối in đang hoạt động")
             .setContentText("Cổng $currentPort ➔ ${if (connectType == POSConnect.DEVICE_TYPE_USB) "USB" else "Bluetooth"}")
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setContentIntent(pMain)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dừng", pStop)
+            .addAction(actionStop)
 
         val notif = notifBuilder.build()
 

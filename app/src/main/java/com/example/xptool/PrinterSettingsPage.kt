@@ -40,6 +40,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.DENSITY,
             customView = spDensity,
+            log = log,
             onApply = {
                 val selectedIndex = spDensity.selectedItemPosition + 1
                 val bytes = CapturedCommands.DENSITY.getBytes?.invoke(selectedIndex)
@@ -56,6 +57,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.PAPER_WIDTH,
             customView = spWidth,
+            log = log,
             onApply = {
                 val selectedWidth = spWidth.selectedItem.toString()
                 val bytes = CapturedCommands.PAPER_WIDTH.getBytes?.invoke(selectedWidth)
@@ -70,6 +72,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.CUT_WITH_BEEP,
             customView = cbCutBeep,
+            log = log,
             onApply = {
                 val enable = cbCutBeep.isChecked
                 val labelVal = if (enable) "BẬT (ON)" else "TẮT (OFF)"
@@ -89,6 +92,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.SOUND_LIGHT_ALARM,
             customView = alarmCol,
+            log = log,
             onApply = {
                 val enable = cbAlarm.isChecked
                 val duration = etAlarmTime.text.toString().toIntOrNull() ?: 3
@@ -105,6 +109,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.REPLAY_ON_ERROR,
             customView = cbReplay,
+            log = log,
             onApply = {
                 val enable = cbReplay.isChecked
                 val labelVal = if (enable) "BẬT (ON)" else "TẮT (OFF)"
@@ -119,6 +124,7 @@ object PrinterSettingsPage {
             container = container,
             cmd = CapturedCommands.PRINT_CONFIG_PAGE,
             customView = null,
+            log = log,
             onApply = {
                 val bytes = CapturedCommands.PRINT_CONFIG_PAGE.getBytes?.invoke(null)
                 confirmAndSend(activity, "In trang cấu hình", "In thông tin máy in", bytes, sendPrintData, log)
@@ -189,6 +195,7 @@ object PrinterSettingsPage {
         container: LinearLayout,
         cmd: CapturedCommands.CommandItem,
         customView: View?,
+        log: (String) -> Unit,
         onApply: () -> Unit
     ) {
         val card = activity.column().apply {
