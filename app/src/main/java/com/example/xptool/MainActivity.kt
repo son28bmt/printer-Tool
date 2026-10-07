@@ -340,11 +340,11 @@ class MainActivity : Activity() {
         fun refreshUsb() {
             usbAdapter.clear()
             usbNames.clear()
-            val names = POSConnect.getUsbNames(applicationContext)
+            val names: List<String>? = POSConnect.getUsbDevices(applicationContext)
             if (names.isNullOrEmpty()) {
                 log("Không tìm thấy thiết bị máy in USB cắm qua cáp OTG.")
             } else {
-                names.forEach { name ->
+                for (name in names) {
                     usbNames.add(name)
                     usbAdapter.add(name)
                 }
