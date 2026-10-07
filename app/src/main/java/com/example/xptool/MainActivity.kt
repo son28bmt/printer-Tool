@@ -510,12 +510,19 @@ class MainActivity : Activity() {
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
         b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
+        b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
     }
     }
 
     private fun pageInfoTest() {
         showPage("8. Thông tin & thử máy", false) { body ->
             InfoTestPage.buildView(this, body) { msg -> log(msg) }
+        }
+    }
+
+    private fun pagePrinterSettings() {
+        showPage("9. Cài đặt máy in", false) { body ->
+            PrinterSettingsPage.buildView(this, body, { label, data -> sendPrintData(label, data) }, { msg -> log(msg) })
         }
     }
 
