@@ -427,8 +427,62 @@ class MainActivity : Activity() {
 
     // ------------------------------------------- TRANG 1: TÌM MÁY IN & ĐỔI IP
 
-    private fun foundLabel(d: UdpDevice) =
-        "${d.ipStr}  [${d.macStr}]" + if (d.isDhcp) "  DHCP" else ""
+    private fun safeIpStr(d: UdpDevice?): String {
+        if (d == null) return ""
+        return try {
+            val ip = d.ipAddress
+            if (ip != null && ip.size >= 4) ipStr(ip)
+            else d.ipStr ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun safeMacStr(d: UdpDevice?): String {
+        if (d == null) return ""
+        return try {
+            val mac = d.macStr ?: ""
+            if (mac == "00:00:00:00:00:00") "" else mac
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun createDummyUdpDevice(ip: String, ipB: ByteArray): UdpDevice {
+        val buf = ByteArray(64)
+        if (ipB.size == 4) {
+            buf[0] = ipB[0]
+            buf[1] = ipB[1]
+            buf[2] = ipB[2]
+            buf[3] = ipB[3]
+        }
+        return try {
+            UdpDevice(buf).apply {
+                setIpAddress(ipB)
+                setMask(byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 0))
+                setGateway(byteArrayOf(ipB[0], ipB[1], ipB[2], 1))
+                setMacAddress(byteArrayOf(0, 0, 0, 0, 0, 0))
+                setDhcp(false)
+            }
+        } catch (_: Exception) {
+            UdpDevice(ByteArray(64))
+        }
+    }
+
+    private fun foundLabel(d: UdpDevice): String {
+        return try {
+            val ip = safeIpStr(d)
+            val mac = safeMacStr(d)
+            val isDhcp = try { d.isDhcp } catch (_: Exception) { false }
+            if (mac.isNotEmpty()) {
+                "$ip  [$mac]" + if (isDhcp) "  DHCP" else ""
+            } else {
+                "$ip  [LAN Port 9100]"
+            }
+        } catch (_: Exception) {
+            "Máy in LAN"
+        }
+    }
 
     private fun pageNetwork() = showPage("Tìm máy in LAN & Đổi IP", false) { b ->
         val pn0 = phoneNet()
@@ -449,12 +503,18 @@ class MainActivity : Activity() {
         val result = column().apply { visibility = View.GONE }
 
         fun refreshWarn() {
-            val d = found.getOrNull(spFound.selectedItemPosition) ?: return
-            val pn = phoneNet()
-            tvWarn.text =
-                if (pn != null && !sameSubnet(d.ipAddress, pn.ip, pn.mask))
-                    "⚠ Máy in (${d.ipStr}) khác dải điện thoại (${ipStr(pn.ip)}). Nên đổi IP máy in về cùng dải."
-                else "Máy in cùng dải với điện thoại."
+            try {
+                val d = found.getOrNull(spFound.selectedItemPosition) ?: return
+                val pn = phoneNet()
+                val dIp = safeIpStr(d)
+                val dIpBytes = d.ipAddress
+                tvWarn.text =
+                    if (pn != null && dIpBytes != null && dIpBytes.size >= 4 && !sameSubnet(dIpBytes, pn.ip, pn.mask))
+                        "⚠ Máy in ($dIp) khác dải điện thoại (${ipStr(pn.ip)}). Nên đổi IP máy in về cùng dải."
+                    else "Máy in cùng dải với điện thoại."
+            } catch (_: Exception) {
+                tvWarn.text = ""
+            }
         }
 
         spFound.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -485,26 +545,24 @@ class MainActivity : Activity() {
 
         b.addView(btn("Quét dải IP mạng LAN cổng 9100 (Zywell, Epson, Xprinter...)") {
             scanLanPort9100 { ips ->
-                if (ips.isNotEmpty()) {
-                    for (ip in ips) {
-                        if (found.none { it.ipStr == ip }) {
-                            val ipB = ip4(ip) ?: byteArrayOf(0, 0, 0, 0)
-                            val dev = UdpDevice(ByteArray(0)).apply {
-                                setIpAddress(ipB)
-                                setMask(byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 0))
-                                setGateway(byteArrayOf(ipB[0], ipB[1], ipB[2], 1))
-                                setMacAddress(byteArrayOf(0, 0, 0, 0, 0, 0))
-                                setDhcp(false)
+                try {
+                    if (ips.isNotEmpty()) {
+                        for (ip in ips) {
+                            if (found.none { safeIpStr(it) == ip }) {
+                                val ipB = ip4(ip) ?: byteArrayOf(0, 0, 0, 0)
+                                val dev = createDummyUdpDevice(ip, ipB)
+                                found.add(dev)
+                                foundAdapter.add("$ip  [LAN Port 9100]")
                             }
-                            found.add(dev)
-                            foundAdapter.add("$ip  [LAN Port 9100]")
                         }
+                        result.visibility = View.VISIBLE
+                        refreshWarn()
+                        log("Đã quét thấy ${ips.size} máy in mở cổng 9100: ${ips.joinToString(", ")}. Chọn máy in trong danh sách bên dưới.")
+                    } else {
+                        log("Không tìm thấy địa chỉ IP nào mở cổng 9100 trong dải WiFi hiện tại.")
                     }
-                    result.visibility = View.VISIBLE
-                    refreshWarn()
-                    log("Đã quét thấy ${ips.size} máy in mở cổng 9100: ${ips.joinToString(", ")}. Chọn máy in trong danh sách bên dưới.")
-                } else {
-                    log("Không tìm thấy địa chỉ IP nào mở cổng 9100 trong dải WiFi hiện tại.")
+                } catch (e: Exception) {
+                    log("Lỗi xử lý kết quả quét LAN: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
         })
@@ -514,8 +572,10 @@ class MainActivity : Activity() {
         result.addView(tvWarn)
         result.addView(btn("Dùng máy in này cho kết nối LAN") {
             val d = found.getOrNull(spFound.selectedItemPosition)
-            val selectedIp = d?.ipStr ?: spFound.selectedItem?.toString()?.split(" ")?.firstOrNull()
-            if (selectedIp.isNullOrEmpty()) return@btn log("Chưa chọn máy in.")
+            val selectedIp = safeIpStr(d).ifEmpty {
+                spFound.selectedItem?.toString()?.split(" ")?.firstOrNull() ?: ""
+            }
+            if (selectedIp.isEmpty()) return@btn log("Chưa chọn máy in.")
             printerIp = selectedIp
             connectType = POSConnect.DEVICE_TYPE_ETHERNET
             savePrinter()
@@ -600,17 +660,27 @@ class MainActivity : Activity() {
     }
 
     private fun onFound(d: UdpDevice) {
-        if (found.any { it.macStr == d.macStr }) return
-        found.add(d)
-        log("Tìm thấy: IP ${d.ipStr}, mask ${d.maskStr}, gw ${d.gatewayStr}, MAC ${d.macStr}, DHCP=${d.isDhcp}")
-        onFoundUi?.invoke(d)
+        try {
+            val dMac = safeMacStr(d)
+            val dIp = safeIpStr(d)
+            if (dMac.isNotEmpty() && found.any { safeMacStr(it) == dMac }) return
+            if (dIp.isNotEmpty() && found.any { safeIpStr(it) == dIp }) return
+            found.add(d)
+            log("Tìm thấy: IP $dIp" + (if (dMac.isNotEmpty()) ", MAC $dMac" else ""))
+            onFoundUi?.invoke(d)
+        } catch (e: Exception) {
+            log("Lỗi xử lý thiết bị tìm thấy: ${e.message}")
+        }
     }
 
     private fun confirmChange(dev: UdpDevice, ip: ByteArray, mask: ByteArray, gw: ByteArray, dhcp: Boolean) {
+        val devMac = safeMacStr(dev)
+        val devIp = safeIpStr(dev)
         val msg = if (dhcp) {
-            "Máy in ${dev.macStr} sẽ chuyển sang DHCP (router cấp IP)."
+            "Máy in ${devMac.ifEmpty { devIp }} sẽ chuyển sang DHCP (router cấp IP)."
         } else {
-            "MAC ${dev.macStr}\n${dev.ipStr} → ${ipStr(ip)}\nMask ${ipStr(mask)}\nGateway ${ipStr(gw)}"
+            (if (devMac.isNotEmpty()) "MAC $devMac\n" else "") +
+                    "$devIp → ${ipStr(ip)}\nMask ${ipStr(mask)}\nGateway ${ipStr(gw)}"
         }
         AlertDialog.Builder(this)
             .setTitle("Đổi IP máy in?")
@@ -626,7 +696,7 @@ class MainActivity : Activity() {
                             }
                         }
                         log(
-                            "Đã gửi lệnh đổi IP cho ${dev.macStr}. Đợi vài giây (nếu chưa đổi thì tắt " +
+                            "Đã gửi lệnh đổi IP cho ${devMac.ifEmpty { devIp }}. Đợi vài giây (nếu chưa đổi thì tắt " +
                                 "mở lại máy in), rồi bấm 'Tìm máy in' để kiểm tra."
                         )
                     } catch (e: Exception) {
@@ -1170,7 +1240,9 @@ PRINT 1,1
         }
     }
 
-    private fun sameSubnet(a: ByteArray, b: ByteArray, mask: ByteArray): Boolean {
+    private fun sameSubnet(a: ByteArray?, b: ByteArray?, mask: ByteArray?): Boolean {
+        if (a == null || b == null || mask == null) return false
+        if (a.size < 4 || b.size < 4 || mask.size < 4) return false
         for (i in 0..3) {
             if ((a[i].toInt() and mask[i].toInt()) != (b[i].toInt() and mask[i].toInt())) return false
         }
@@ -1183,7 +1255,7 @@ PRINT 1,1
             return null
         }
         val base = "${pn.ip[0].toInt() and 0xFF}.${pn.ip[1].toInt() and 0xFF}.${pn.ip[2].toInt() and 0xFF}."
-        val taken = setOf(ipStr(pn.ip), ipStr(pn.gw)) + found.map { it.ipStr }
+        val taken = setOf(ipStr(pn.ip), ipStr(pn.gw)) + found.map { safeIpStr(it) }
         for (h in 230 downTo 200) {
             val c = base + h
             if (c in taken) continue
