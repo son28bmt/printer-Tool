@@ -97,13 +97,24 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         POSConnect.init(applicationContext)
+        PrinterManager.init(applicationContext)
 
-        val prefs = getSharedPreferences("xp", MODE_PRIVATE)
-        printerIp = prefs.getString("ip", printerIp) ?: printerIp
-        printerPort = prefs.getInt("port", printerPort)
-        btMac = prefs.getString("btMac", "") ?: ""
-        usbPath = prefs.getString("usbPath", "") ?: ""
-        connectType = prefs.getInt("connType", POSConnect.DEVICE_TYPE_ETHERNET)
+        val active = PrinterManager.getActivePrinter()
+        if (active != null) {
+            printerIp = active.ip
+            printerPort = active.port
+            connectType = active.connectType
+            btMac = active.btMac
+            usbPath = active.usbPath
+            paperWidth = active.paperWidth
+        } else {
+            val prefs = getSharedPreferences("xp", MODE_PRIVATE)
+            printerIp = prefs.getString("ip", printerIp) ?: printerIp
+            printerPort = prefs.getInt("port", printerPort)
+            btMac = prefs.getString("btMac", "") ?: ""
+            usbPath = prefs.getString("usbPath", "") ?: ""
+            connectType = prefs.getInt("connType", POSConnect.DEVICE_TYPE_ETHERNET)
+        }
 
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -301,13 +312,179 @@ class MainActivity : Activity() {
     }
 
     private fun showHome() = showPage("XP Tool by QuangSonAIBAT", true) { b ->
-        b.addView(label("Đang chọn kết nối: ${connTypeName()}", 14f, true))
+        val active = PrinterManager.getActivePrinter()
+        if (active != null) {
+            printerIp = active.ip
+            printerPort = active.port
+            connectType = active.connectType
+            btMac = active.btMac
+            usbPath = active.usbPath
+            paperWidth = active.paperWidth
+        }
+
+        // --- DASHBOARD MÁY IN CỦA TÔI
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = TextView(this).apply {
+            text = "Máy in của tôi (${PrinterManager.savedPrinters.size})"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        val btnRefresh = Button(this).apply {
+            text = "🔄 Làm mới trạng thái"
+            textSize = 12f
+            isAllCaps = false
+            setOnClickListener {
+                PrinterManager.refreshAllStatuses(this@MainActivity, udp) {
+                    runOnUiThread { showHome() }
+                }
+            }
+        }
+        headerRow.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        headerRow.addView(btnRefresh, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        b.addView(headerRow)
+
+        if (PrinterManager.savedPrinters.isEmpty()) {
+            b.addView(label("Chưa có máy in nào trong danh sách. Hãy vào 'Tìm máy in LAN' để dò và lưu máy in."))
+        } else {
+            val listCol = column()
+            PrinterManager.savedPrinters.forEach { p ->
+                val card = column().apply {
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    setBackgroundColor(if (p.id == PrinterManager.activePrinterId) 0xFFE8F5E9.toInt() else 0xFFF5F5F5.toInt())
+                }
+                val dotStr = when (p.status) {
+                    PrinterStatus.ONLINE -> "● Online"
+                    PrinterStatus.OFFLINE -> "○ Offline"
+                    PrinterStatus.CHECKING -> "◌ Đang kiểm tra..."
+                }
+                val dotColor = when (p.status) {
+                    PrinterStatus.ONLINE -> 0xFF2E7D32.toInt()
+                    PrinterStatus.OFFLINE -> 0xFFC62828.toInt()
+                    PrinterStatus.CHECKING -> 0xFFF57F17.toInt()
+                }
+
+                val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val tvName = TextView(this).apply {
+                    text = "${p.name} ${if (p.id == PrinterManager.activePrinterId) "[ĐANG DÙNG]" else ""}"
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(if (p.id == PrinterManager.activePrinterId) 0xFF1B5E20.toInt() else 0xFF212121.toInt())
+                }
+                val tvStatus = TextView(this).apply {
+                    text = dotStr
+                    textSize = 13f
+                    setTextColor(dotColor)
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                row1.addView(tvName, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                row1.addView(tvStatus, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+                val subText = if (p.connectType == POSConnect.DEVICE_TYPE_ETHERNET) {
+                    "IP: ${p.ip}:${p.port}" + (if (p.mac.isNotEmpty()) " | MAC: ${p.mac}" else " | Cổng 9100") + " | Khổ giấy: ${p.paperWidth}mm"
+                } else if (p.connectType == POSConnect.DEVICE_TYPE_BLUETOOTH) {
+                    "Bluetooth MAC: ${p.btMac}"
+                } else {
+                    "USB OTG: ${p.usbPath}"
+                }
+                val tvSub = TextView(this).apply {
+                    text = subText
+                    textSize = 12f
+                    setTextColor(0xFF616161.toInt())
+                }
+
+                val rowBtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val btnUse = Button(this).apply {
+                    text = "Dùng máy này"
+                    textSize = 12f
+                    isAllCaps = false
+                    setOnClickListener {
+                        PrinterManager.setActivePrinter(this@MainActivity, p.id)
+                        printerIp = p.ip
+                        printerPort = p.port
+                        paperWidth = p.paperWidth
+                        connectType = p.connectType
+                        btMac = p.btMac
+                        usbPath = p.usbPath
+                        savePrinter()
+                        log("Đã chọn máy in đang dùng: ${p.name} (${p.ip})")
+                        showHome()
+                    }
+                }
+                val btnTest = Button(this).apply {
+                    text = "In thử"
+                    textSize = 12f
+                    isAllCaps = false
+                    setOnClickListener {
+                        PrinterManager.setActivePrinter(this@MainActivity, p.id)
+                        sendPrintData("In thử ${p.name}", getReceiptDemoBytes())
+                    }
+                }
+                val btnRename = Button(this).apply {
+                    text = "Đổi tên"
+                    textSize = 12f
+                    isAllCaps = false
+                    setOnClickListener {
+                        val etName = EditText(this@MainActivity).apply { setText(p.name) }
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Đổi tên máy in")
+                            .setView(etName)
+                            .setPositiveButton("Lưu") { _, _ ->
+                                val newName = etName.text.toString().trim()
+                                if (newName.isNotEmpty()) {
+                                    p.name = newName
+                                    PrinterManager.saveAll(this@MainActivity)
+                                    showHome()
+                                }
+                            }
+                            .setNegativeButton("Hủy", null)
+                            .show()
+                    }
+                }
+                val btnDel = Button(this).apply {
+                    text = "Xóa"
+                    textSize = 12f
+                    isAllCaps = false
+                    setOnClickListener {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Xóa máy in")
+                            .setMessage("Xóa ${p.name} khỏi danh sách?")
+                            .setPositiveButton("Xóa") { _, _ ->
+                                PrinterManager.removePrinter(this@MainActivity, p.id)
+                                showHome()
+                            }
+                            .setNegativeButton("Hủy", null)
+                            .show()
+                    }
+                }
+
+                rowBtns.addView(btnUse)
+                rowBtns.addView(btnTest)
+                rowBtns.addView(btnRename)
+                rowBtns.addView(btnDel)
+
+                card.addView(row1)
+                card.addView(tvSub)
+                card.addView(rowBtns)
+                listCol.addView(card)
+
+                listCol.addView(View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6))
+                })
+            }
+            b.addView(listCol)
+        }
+
+        b.addView(label("Menu tính năng:", 15f, true))
         b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
-        b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, đổi IP 1 chạm, bật DHCP") { pageNetwork() })
+        b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
         b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
         b.addView(menuBtn("4. In mẫu Hóa đơn & Mã vạch QR", "In Receipt Demo, mã vạch 1D, QR Code thanh toán") { pagePrintReceipt() })
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
-        b.addView(menuBtn("6. Công cụ nâng cao & Reset", "Gửi gói Hex thô, nghe UDP, Khôi phục cài đặt gốc") { pageAdvanced() })
+        b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
     }
 
@@ -600,6 +777,39 @@ class MainActivity : Activity() {
             connectType = POSConnect.DEVICE_TYPE_ETHERNET
             savePrinter()
             log("Đã chọn máy in LAN đang dùng: $printerIp")
+        })
+        result.addView(btn("➕ Lưu máy in này vào danh sách Máy in của tôi") {
+            val d = found.getOrNull(spFound.selectedItemPosition)
+            val selectedIp = safeIpStr(d).ifEmpty {
+                spFound.selectedItem?.toString()?.split(" ")?.firstOrNull() ?: ""
+            }
+            if (selectedIp.isEmpty()) return@btn log("Chưa chọn máy in.")
+            val mac = safeMacStr(d)
+            val defaultName = "Máy in $selectedIp" + (if (mac.isNotEmpty()) " [$mac]" else "")
+            val etName = EditText(this).apply { setText(defaultName) }
+            AlertDialog.Builder(this)
+                .setTitle("Lưu vào Máy in của tôi")
+                .setMessage("Nhập tên gợi nhớ cho máy in này (Ví dụ: Máy in Quầy 1):")
+                .setView(etName)
+                .setPositiveButton("Lưu") { _, _ ->
+                    val name = etName.text.toString().trim().ifEmpty { defaultName }
+                    val newSaved = SavedPrinter(
+                        id = if (mac.isNotEmpty()) mac else selectedIp,
+                        name = name,
+                        mac = mac,
+                        ip = selectedIp,
+                        port = printerPort,
+                        connectType = POSConnect.DEVICE_TYPE_ETHERNET,
+                        paperWidth = paperWidth
+                    )
+                    PrinterManager.addOrUpdatePrinter(this, newSaved)
+                    PrinterManager.setActivePrinter(this, newSaved.id)
+                    printerIp = selectedIp
+                    savePrinter()
+                    log("✔ Đã lưu '$name' vào danh sách Máy in của tôi.")
+                }
+                .setNegativeButton("Hủy", null)
+                .show()
         })
         result.addView(label("Tùy chọn đổi IP máy in:", 15f, true))
 
@@ -1110,7 +1320,19 @@ class MainActivity : Activity() {
 
     private fun sendPrintData(label: String, data: ByteArray) {
         if (connectType == POSConnect.DEVICE_TYPE_ETHERNET) {
-            sendTcp(targetIp(), targetPort(), data, label)
+            val active = PrinterManager.getActivePrinter()
+            if (active != null) {
+                PrinterManager.resolvePrinter(this, udp, active, onLog = { log(it) }) { resolvedIp ->
+                    if (resolvedIp == null) {
+                        log("✘ Không thể gửi lệnh in: Máy in ${active.name} (${active.ip}) không phản hồi mạng.")
+                    } else {
+                        printerIp = resolvedIp
+                        sendTcp(resolvedIp, targetPort(), data, label)
+                    }
+                }
+            } else {
+                sendTcp(targetIp(), targetPort(), data, label)
+            }
             return
         }
         log("Kết nối tới máy in ${connTypeName()} để gửi [$label] ...")
@@ -1123,7 +1345,10 @@ class MainActivity : Activity() {
                     log("Gửi OK!")
                     mainHandler.postDelayed({ conn.close() }, 1000)
                 }
-                POSConnect.CONNECT_FAIL -> log("Kết nối thất bại: $msg")
+                POSConnect.CONNECT_FAIL -> {
+                    log("Kết nối thất bại: $msg")
+                    try { conn.close() } catch (_: Exception) {}
+                }
                 else -> log("Trạng thái kết nối: code=$code $msg")
             }
         }
