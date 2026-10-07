@@ -133,7 +133,20 @@ class MainActivity : Activity() {
         showHome()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (currentPageIsHome && PrinterManager.savedPrinters.isNotEmpty()) {
+            showHome()
+        }
+    }
+
+    override fun onPause() {
+        mainHandler.removeCallbacks(autoRefreshRunnable)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        mainHandler.removeCallbacks(autoRefreshRunnable)
         InfoTestPage.stopStressTest()
         try {
             udp.closeNetSocket()
@@ -232,6 +245,9 @@ class MainActivity : Activity() {
         syncPrinterFields()
         onFoundUi = null
         currentPageIsHome = isHome
+        if (!isHome) {
+            mainHandler.removeCallbacks(autoRefreshRunnable)
+        }
 
         val root = column().apply { setPadding(dp(12), dp(8), dp(12), dp(8)) }
 
@@ -316,7 +332,30 @@ class MainActivity : Activity() {
         else -> "LAN/WiFi ($printerIp:$printerPort)"
     }
 
-    private fun showHome() {
+    private var isRefreshingHomeStatus = false
+
+    private val autoRefreshRunnable = object : Runnable {
+        override fun run() {
+            if (currentPageIsHome && PrinterManager.savedPrinters.isNotEmpty()) {
+                triggerAutoRefreshStatus()
+            }
+        }
+    }
+
+    private fun triggerAutoRefreshStatus() {
+        if (isRefreshingHomeStatus) return
+        isRefreshingHomeStatus = true
+        PrinterManager.refreshAllStatuses(this@MainActivity, udp) {
+            runOnUiThread {
+                isRefreshingHomeStatus = false
+                if (currentPageIsHome) {
+                    showHome(skipAutoRefreshTrigger = true)
+                }
+            }
+        }
+    }
+
+    private fun showHome(skipAutoRefreshTrigger: Boolean = false) {
         showPage("XP Tool by QuangSonAIBAT", true) { b ->
         val active = PrinterManager.getActivePrinter()
         if (active != null) {
@@ -344,9 +383,7 @@ class MainActivity : Activity() {
             textSize = 12f
             isAllCaps = false
             setOnClickListener {
-                PrinterManager.refreshAllStatuses(this@MainActivity, udp) {
-                    runOnUiThread { showHome() }
-                }
+                triggerAutoRefreshStatus()
             }
         }
         headerRow.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -514,6 +551,14 @@ class MainActivity : Activity() {
         b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
         b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
     }
+
+        mainHandler.removeCallbacks(autoRefreshRunnable)
+        if (PrinterManager.savedPrinters.isNotEmpty()) {
+            if (!skipAutoRefreshTrigger) {
+                triggerAutoRefreshStatus()
+            }
+            mainHandler.postDelayed(autoRefreshRunnable, 15000)
+        }
     }
 
     private fun pageInfoTest() {
