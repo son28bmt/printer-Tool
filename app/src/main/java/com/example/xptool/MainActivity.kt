@@ -1480,7 +1480,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun sendPrintData(label: String, data: ByteArray) {
+    fun sendPrintData(label: String, data: ByteArray) {
         if (connectType == POSConnect.DEVICE_TYPE_ETHERNET) {
             val active = PrinterManager.getActivePrinter()
             if (active != null) {
