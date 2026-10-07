@@ -52,6 +52,7 @@ class MainActivity : Activity() {
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     private val mainHandler = Handler(Looper.getMainLooper())
+
     private val logBuffer = StringBuilder()
     private var logView: TextView? = null
     private var logScroll: ScrollView? = null
@@ -69,9 +70,14 @@ class MainActivity : Activity() {
 
     private val encTypes = listOf(
         "WPA2_AES_PSK" to POSConst.ENCRYPT_WPA2_AES_PSK,
+        "WPA2_TKIP_AES_PSK" to POSConst.ENCRYPT_WPA2_TKIP_AES_PSK,
+        "WPA2_TKIP" to POSConst.ENCRYPT_WPA2_TKIP,
+        "WPA_WPA2_MixedMode" to POSConst.ENCRYPT_WPA_WPA2_MixedMode,
+        "WPA_AES_PSK" to POSConst.ENCRYPT_WPA_AES_PSK,
         "WPA_TKIP_PSK" to POSConst.ENCRYPT_WPA_TKIP_PSK,
-        "WEP64_ASCII" to POSConst.ENCRYPT_WEP64_ASCII,
-        "WEP128_ASCII" to POSConst.ENCRYPT_WEP128_ASCII,
+        "WPA_TKIP_AES_PSK" to POSConst.ENCRYPT_WPA_TKIP_AES_PSK,
+        "WEP64" to POSConst.ENCRYPT_WEP64,
+        "WEP128" to POSConst.ENCRYPT_WEP128,
         "Không mã hóa" to POSConst.ENCRYPT_NULL
     )
 
@@ -86,7 +92,7 @@ class MainActivity : Activity() {
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             multicastLock = wm.createMulticastLock("xptool").apply {
-                setReferenceCounted(true)
+                setReferenceCounted(false)
                 acquire()
             }
         } catch (_: Exception) {
@@ -98,7 +104,8 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         try {
-            multicastLock?.let { if (it.isHeld) it.release() }
+            udp.closeNetSocket()
+            multicastLock?.release()
         } catch (_: Exception) {
         }
         super.onDestroy()
@@ -709,15 +716,23 @@ class MainActivity : Activity() {
     private fun sendTcp(ip: String, port: Int, data: ByteArray, label: String) {
         thread {
             try {
-                log("Gửi TCP $label tới $ip:$port ...")
                 Socket().use { s ->
                     s.connect(InetSocketAddress(ip, port), 3000)
-                    s.getOutputStream().write(data)
-                    s.getOutputStream().flush()
+                    s.getOutputStream().apply {
+                        write(data)
+                        flush()
+                    }
+                    log("TCP → $ip:$port [$label] ${data.size} byte: ${hex(data)}")
+                    s.soTimeout = 1500
+                    try {
+                        val buf = ByteArray(1024)
+                        val n = s.getInputStream().read(buf)
+                        if (n > 0) log("TCP ← ${hex(buf, n)}  |${ascii(buf, n)}|")
+                    } catch (_: SocketTimeoutException) {
+                    }
                 }
-                log("Gửi OK (${data.size} byte)")
             } catch (e: Exception) {
-                log("Gửi TCP lỗi: ${e.javaClass.simpleName}: ${e.message}")
+                log("TCP lỗi $ip:$port: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
@@ -725,15 +740,30 @@ class MainActivity : Activity() {
     private fun sendUdp(ip: String, port: Int, data: ByteArray, broadcast: Boolean) {
         thread {
             try {
-                log("Gửi UDP tới $ip:$port (${data.size} byte)...")
                 DatagramSocket().use { s ->
-                    if (broadcast) s.broadcast = true
-                    val p = DatagramPacket(data, data.size, InetSocketAddress(ip, port))
-                    s.send(p)
+                    s.broadcast = broadcast
+                    s.soTimeout = 1000
+                    s.send(DatagramPacket(data, data.size, InetAddress.getByName(ip), port))
+                    log("UDP → $ip:$port ${data.size} byte (cổng nguồn ${s.localPort}): ${hex(data)}")
+                    val end = System.currentTimeMillis() + 3000
+                    var got = 0
+                    while (System.currentTimeMillis() < end) {
+                        try {
+                            val buf = ByteArray(2048)
+                            val p = DatagramPacket(buf, buf.size)
+                            s.receive(p)
+                            got++
+                            log(
+                                "UDP ← ${p.address.hostAddress}:${p.port} ${p.length} byte: " +
+                                    "${hex(buf, p.length)}  |${ascii(buf, p.length)}|"
+                            )
+                        } catch (_: SocketTimeoutException) {
+                        }
+                    }
+                    if (got == 0) log("Không có phản hồi UDP sau 3 giây")
                 }
-                log("Gửi UDP OK")
             } catch (e: Exception) {
-                log("Gửi UDP lỗi: ${e.javaClass.simpleName}: ${e.message}")
+                log("UDP lỗi: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
@@ -743,10 +773,11 @@ class MainActivity : Activity() {
             try {
                 DatagramSocket(null).use { s ->
                     s.reuseAddress = true
+                    s.broadcast = true
                     s.bind(InetSocketAddress(port))
                     s.soTimeout = 1000
                     log("Đang nghe UDP cổng $port trong 20 giây...")
-                    val end = System.currentTimeMillis() + 20000
+                    val end = System.currentTimeMillis() + 20_000
                     var got = 0
                     while (System.currentTimeMillis() < end) {
                         try {
