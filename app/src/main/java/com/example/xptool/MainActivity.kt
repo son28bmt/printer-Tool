@@ -161,6 +161,9 @@ class MainActivity : Activity() {
         controls.addView(row(etNewMask to 1f, etNewGw to 1f))
         controls.addView(cbDhcp)
         controls.addView(btn("Đổi IP máy in đã chọn") { applyIp() })
+        controls.addView(btn("Điền theo mạng điện thoại") { fillFromPhone(false) })
+        controls.addView(btn("Đổi IP 1 chạm (về cùng dải điện thoại)") { fillFromPhone(true) })
+        controls.addView(btn("Chuyển máy in sang DHCP") { setDhcpMode() })
 
         // 3. WiFi
         controls.addView(title("3. Cấu hình WiFi cho máy in (cần kết nối được tới IP ở mục 1)"))
@@ -324,6 +327,13 @@ class MainActivity : Activity() {
         val label = "${d.ipStr}  [${d.macStr}]" + if (d.isDhcp) "  DHCP" else ""
         foundAdapter.add(label)
         log("Tìm thấy: IP ${d.ipStr}, mask ${d.maskStr}, gw ${d.gatewayStr}, MAC ${d.macStr}, DHCP=${d.isDhcp}")
+        val pn = phoneNet()
+        if (pn != null && !sameSubnet(d.ipAddress, pn.ip, pn.mask)) {
+            log(
+                "Máy in (${d.ipStr}) KHÁC dải với điện thoại (${ipStr(pn.ip)}). " +
+                    "Bấm 'Đổi IP 1 chạm' để đưa máy in về cùng dải."
+            )
+        }
         if (found.size == 1) {
             etIp.setText(d.ipStr)
             if (etNewGw.text.isNullOrBlank()) etNewGw.setText(d.gatewayStr)
@@ -376,6 +386,102 @@ class MainActivity : Activity() {
                         )
                     } catch (e: Exception) {
                         log("Đổi IP lỗi: ${e.javaClass.simpleName}: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    // ------------------------------------- lấy mạng điện thoại, đổi 1 chạm
+
+    private class PhoneNet(val ip: ByteArray, val mask: ByteArray, val gw: ByteArray)
+
+    @Suppress("DEPRECATION")
+    private fun phoneNet(): PhoneNet? {
+        return try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val d = wm.dhcpInfo ?: return null
+            fun le(v: Int) = byteArrayOf(
+                (v and 0xFF).toByte(),
+                ((v shr 8) and 0xFF).toByte(),
+                ((v shr 16) and 0xFF).toByte(),
+                ((v shr 24) and 0xFF).toByte()
+            )
+            val ip = le(d.ipAddress)
+            if (ip.all { it == 0.toByte() }) return null
+            var mask = le(d.netmask)
+            if (mask.all { it == 0.toByte() }) {
+                mask = byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 0)
+            }
+            PhoneNet(ip, mask, le(d.gateway))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun sameSubnet(a: ByteArray, b: ByteArray, mask: ByteArray): Boolean {
+        for (i in 0..3) {
+            if ((a[i].toInt() and mask[i].toInt()) != (b[i].toInt() and mask[i].toInt())) return false
+        }
+        return true
+    }
+
+    // Tìm 1 IP chưa ai dùng trong dải của điện thoại (kiểm tra bằng ping, chỉ là ước đoán)
+    private fun findFreeIp(pn: PhoneNet): String? {
+        if (ipStr(pn.mask) != "255.255.255.0") {
+            log("Mask ${ipStr(pn.mask)} không phải /24, hãy nhập IP mới thủ công.")
+            return null
+        }
+        val base = "${pn.ip[0].toInt() and 0xFF}.${pn.ip[1].toInt() and 0xFF}.${pn.ip[2].toInt() and 0xFF}."
+        val taken = setOf(ipStr(pn.ip), ipStr(pn.gw)) + found.map { it.ipStr }
+        for (h in 230 downTo 200) {
+            val c = base + h
+            if (c in taken) continue
+            try {
+                if (!InetAddress.getByName(c).isReachable(300)) return c
+            } catch (_: Exception) {
+            }
+        }
+        return null
+    }
+
+    private fun fillFromPhone(apply: Boolean) {
+        val pn = phoneNet()
+            ?: return log("Không đọc được mạng WiFi của điện thoại. Hãy bật WiFi và nối vào router.")
+        thread {
+            val free = findFreeIp(pn)
+            runOnUiThread {
+                etNewMask.setText(ipStr(pn.mask))
+                etNewGw.setText(ipStr(pn.gw))
+                cbDhcp.isChecked = false
+                if (free == null) {
+                    log("Đã điền mask/gateway. Không tìm được IP trống tự động, hãy nhập IP mới thủ công.")
+                    return@runOnUiThread
+                }
+                etNewIp.setText(free)
+                log("Điền theo mạng điện thoại: IP $free, mask ${ipStr(pn.mask)}, gw ${ipStr(pn.gw)}")
+                if (apply) applyIp()
+            }
+        }
+    }
+
+    private fun setDhcpMode() {
+        val dev = found.getOrNull(spFound.selectedItemPosition)
+            ?: return log("Chưa chọn máy in. Bấm 'Tìm máy in' trước.")
+        AlertDialog.Builder(this)
+            .setTitle("Chuyển sang DHCP?")
+            .setMessage(
+                "Máy in ${dev.macStr} sẽ tự xin IP từ router. " +
+                    "Sau đó bấm 'Tìm máy in' để xem IP mới."
+            )
+            .setPositiveButton("Chuyển") { _, _ ->
+                thread {
+                    try {
+                        udp.udpNetConfig(dev.macAddress, dev.ipAddress, dev.mask, dev.gateway, true)
+                        log("Đã gửi lệnh bật DHCP. Đợi vài giây (hoặc tắt mở lại máy in), rồi bấm 'Tìm máy in'.")
+                    } catch (e: Exception) {
+                        log("Lỗi: ${e.javaClass.simpleName}: ${e.message}")
                     }
                 }
             }
