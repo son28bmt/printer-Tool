@@ -288,6 +288,28 @@ class MainActivity : Activity() {
         b.addView(menuBtn("4. In mẫu Hóa đơn & Mã vạch QR", "In Receipt Demo, mã vạch 1D, QR Code thanh toán") { pagePrintReceipt() })
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
         b.addView(menuBtn("6. Công cụ nâng cao & Reset", "Gửi gói Hex thô, nghe UDP, Khôi phục cài đặt gốc") { pageAdvanced() })
+        b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
+    }
+
+    private fun pageAbout() = showPage("Thông tin & Bảo mật", false) { b ->
+        b.addView(label("XP Tool by QuangSonAIBAT", 18f, true))
+        b.addView(label("Phiên bản: 0.2.0 (Play Store Ready)"))
+        b.addView(label("Tác giả / Nhà phát triển: QuangSonAIBAT"))
+        b.addView(label("Email hỗ trợ: quangsonnguyen2807@gmail.com"))
+        b.addView(label("GitHub Repo: https://github.com/son28bmt/printer-Tool"))
+        b.addView(label("Chính sách bảo mật (Privacy Policy):", 15f, true))
+        b.addView(label(
+            "Ứng dụng KHÔNG thu thập, lưu trữ hay chia sẻ thông tin cá nhân của người dùng. " +
+            "Mọi quyền truy cập WiFi, Bluetooth, USB, Vị trí strictly được sử dụng để kết nối và điều khiển máy in cục bộ."
+        ))
+        b.addView(btn("Xem Chính sách bảo mật (Privacy Policy)") {
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://raw.githubusercontent.com/son28bmt/printer-Tool/main/PRIVACY_POLICY.md"))
+                startActivity(intent)
+            } catch (e: Exception) {
+                log("Lỗi mở trình duyệt: ${e.message}")
+            }
+        })
     }
 
     // ---------------------------------------- TRANG KẾT NỐI: LAN / BT / USB
@@ -464,26 +486,34 @@ class MainActivity : Activity() {
         b.addView(btn("Quét dải IP mạng LAN cổng 9100 (Zywell, Epson, Xprinter...)") {
             scanLanPort9100 { ips ->
                 if (ips.isNotEmpty()) {
-                    val firstIp = ips.first()
-                    printerIp = firstIp
-                    connectType = POSConnect.DEVICE_TYPE_ETHERNET
-                    savePrinter()
-                    log("Đã tìm thấy ${ips.size} IP mở port 9100: ${ips.joinToString(", ")}. Tự động chọn $firstIp:9100")
+                    for (ip in ips) {
+                        if (found.none { it.ipStr == ip }) {
+                            val ipB = ip4(ip) ?: byteArrayOf(0, 0, 0, 0)
+                            val dev = UdpDevice(ipB, byteArrayOf(0,0,0,0,0,0), ipB, ipB, false)
+                            found.add(dev)
+                            foundAdapter.add("$ip  [LAN Port 9100]")
+                        }
+                    }
+                    result.visibility = View.VISIBLE
+                    refreshWarn()
+                    log("Đã quét thấy ${ips.size} máy in mở cổng 9100: ${ips.joinToString(", ")}. Chọn máy in trong danh sách bên dưới.")
                 } else {
                     log("Không tìm thấy địa chỉ IP nào mở cổng 9100 trong dải WiFi hiện tại.")
                 }
             }
         })
 
-        result.addView(label("Máy in tìm thấy:", 15f, true))
+        result.addView(label("Máy in tìm thấy (chọn để sử dụng):", 15f, true))
         result.addView(spFound)
         result.addView(tvWarn)
         result.addView(btn("Dùng máy in này cho kết nối LAN") {
-            val d = found.getOrNull(spFound.selectedItemPosition) ?: return@btn
-            printerIp = d.ipStr
+            val d = found.getOrNull(spFound.selectedItemPosition)
+            val selectedIp = d?.ipStr ?: spFound.selectedItem?.toString()?.split(" ")?.firstOrNull()
+            if (selectedIp.isNullOrEmpty()) return@btn log("Chưa chọn máy in.")
+            printerIp = selectedIp
             connectType = POSConnect.DEVICE_TYPE_ETHERNET
             savePrinter()
-            log("Đã chọn máy in LAN đang dùng: ${d.ipStr}")
+            log("Đã chọn máy in LAN đang dùng: $printerIp")
         })
         result.addView(label("Tùy chọn đổi IP máy in:", 15f, true))
 
