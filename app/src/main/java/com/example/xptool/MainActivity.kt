@@ -184,31 +184,31 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------ khung UI
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-    private fun label(t: String, size: Float = 14f, bold: Boolean = false) = TextView(this).apply {
+    fun label(t: String, size: Float = 14f, bold: Boolean = false) = TextView(this).apply {
         text = t
         textSize = size
         if (bold) typeface = Typeface.DEFAULT_BOLD
         setPadding(0, dp(6), 0, dp(6))
     }
 
-    private fun edit(hint: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT) =
+    fun edit(hint: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT) =
         EditText(this).apply {
             this.hint = hint
             setText(value)
             inputType = type
         }
 
-    private fun btn(text: String, onClick: () -> Unit) = Button(this).apply {
+    fun btn(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
         isAllCaps = false
         setOnClickListener { onClick() }
     }
 
-    private fun menuBtn(title: String, sub: String, onClick: () -> Unit) = Button(this).apply {
+    fun menuBtn(title: String, sub: String, onClick: () -> Unit) = Button(this).apply {
         text = "$title\n$sub"
         isAllCaps = false
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -216,14 +216,14 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun row(vararg items: Pair<View, Float>) = LinearLayout(this).apply {
+    fun row(vararg items: Pair<View, Float>) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         for ((v, w) in items) {
             addView(v, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, w))
         }
     }
 
-    private fun radio(text: String) = RadioButton(this).apply {
+    fun radio(text: String) = RadioButton(this).apply {
         this.text = text
         id = View.generateViewId()
     }
