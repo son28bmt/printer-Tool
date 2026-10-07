@@ -1,0 +1,144 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.example.xptool"
+4    android:versionCode="1"
+5    android:versionName="0.1" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="34" />
+10
+11    <!-- Mạng / WiFi -->
+12    <uses-permission android:name="android.permission.INTERNET" />
+12-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:5:5-67
+12-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:5:22-64
+13    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+13-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:6:5-76
+13-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:6:22-73
+14    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+14-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:7:5-76
+14-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:7:22-73
+15    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+15-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:8:5-79
+15-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:8:22-76
+16    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+16-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:9:5-86
+16-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:9:22-83
+17
+18    <!-- Bluetooth: Android 11 trở xuống dùng quyền cũ, Android 12+ dùng quyền mới -->
+19    <uses-permission
+19-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:12:5-95
+20        android:name="android.permission.BLUETOOTH"
+20-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:12:22-65
+21        android:maxSdkVersion="30" />
+21-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:12:66-92
+22    <uses-permission
+22-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:13:5-101
+23        android:name="android.permission.BLUETOOTH_ADMIN"
+23-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:13:22-71
+24        android:maxSdkVersion="30" />
+24-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:13:72-98
+25    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+25-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:14:5-76
+25-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:14:22-73
+26    <uses-permission
+26-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:15:5-17:58
+27        android:name="android.permission.BLUETOOTH_SCAN"
+27-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:16:9-57
+28        android:usesPermissionFlags="neverForLocation" />
+28-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:17:9-55
+29
+30    <!-- Đọc SSID WiFi đang nối và quét WiFi -->
+31    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+31-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:20:5-79
+31-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:20:22-76
+32    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+32-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:21:5-81
+32-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:21:22-78
+33    <!-- Android 13+ (không đặt neverForLocation vì app cần đọc SSID đang kết nối) -->
+34    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+34-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:23:5-78
+34-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:23:22-75
+35
+36    <!-- Tất cả tính năng phần cứng đều không bắt buộc, để Play Store không lọc mất thiết bị -->
+37    <uses-feature
+37-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:26:5-87
+38        android:name="android.hardware.usb.host"
+38-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:26:19-59
+39        android:required="true" />
+39-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:26:60-84
+40    <uses-feature
+40-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:27:5-88
+41        android:name="android.hardware.bluetooth"
+41-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:27:19-60
+42        android:required="false" />
+42-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:27:61-85
+43    <uses-feature
+43-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:28:5-83
+44        android:name="android.hardware.wifi"
+44-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:28:19-55
+45        android:required="false" />
+45-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:28:56-80
+46    <uses-feature
+46-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:29:5-87
+47        android:name="android.hardware.location"
+47-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:29:19-59
+48        android:required="false" />
+48-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:29:60-84
+49    <uses-feature
+49-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:30:5-91
+50        android:name="android.hardware.location.gps"
+50-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:30:19-63
+51        android:required="false" />
+51-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:30:64-88
+52
+53    <uses-permission android:name="android.permission.USB_PERMISSION" />
+53-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:13:5-73
+53-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:13:22-70
+54    <uses-permission android:name="android.hardware.usb.UsbAccessory" />
+54-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:14:5-73
+54-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:14:22-70
+55    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+55-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:19:5-78
+55-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:19:22-75
+56    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+56-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:24:5-79
+56-->[printer-lib-3.2.0.aar] C:\Users\ADMIN\.gradle\caches\transforms-4\5a0d660338aa420e24c9912eddf8485c\transformed\printer-lib-3.2.0\AndroidManifest.xml:24:22-76
+57
+58    <application
+58-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:32:5-47:19
+59        android:allowBackup="true"
+59-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:33:9-35
+60        android:debuggable="true"
+61        android:extractNativeLibs="false"
+62        android:icon="@mipmap/ic_launcher"
+62-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:34:9-43
+63        android:label="XP Tool By QuangSonAIBAT"
+63-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:36:9-49
+64        android:roundIcon="@mipmap/ic_launcher_round"
+64-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:35:9-54
+65        android:testOnly="true"
+66        android:theme="@android:style/Theme.Material.Light.DarkActionBar" >
+66-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:37:9-74
+67        <activity
+67-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:38:9-46:20
+68            android:name="com.example.xptool.MainActivity"
+68-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:39:13-41
+69            android:exported="true"
+69-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:40:13-36
+70            android:windowSoftInputMode="adjustResize" >
+70-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:41:13-55
+71            <intent-filter>
+71-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:42:13-45:29
+72                <action android:name="android.intent.action.MAIN" />
+72-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:43:17-69
+72-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:43:25-66
+73
+74                <category android:name="android.intent.category.LAUNCHER" />
+74-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:44:17-77
+74-->C:\Users\ADMIN\Downloads\xptool (1)\xptool\app\src\main\AndroidManifest.xml:44:27-74
+75            </intent-filter>
+76        </activity>
+77    </application>
+78
+79</manifest>
