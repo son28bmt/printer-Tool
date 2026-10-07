@@ -489,7 +489,13 @@ class MainActivity : Activity() {
                     for (ip in ips) {
                         if (found.none { it.ipStr == ip }) {
                             val ipB = ip4(ip) ?: byteArrayOf(0, 0, 0, 0)
-                            val dev = UdpDevice(ipB, byteArrayOf(0,0,0,0,0,0), ipB, ipB, false)
+                            val dev = UdpDevice(ByteArray(0)).apply {
+                                setIpAddress(ipB)
+                                setMask(byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 0))
+                                setGateway(byteArrayOf(ipB[0], ipB[1], ipB[2], 1))
+                                setMacAddress(byteArrayOf(0, 0, 0, 0, 0, 0))
+                                setDhcp(false)
+                            }
                             found.add(dev)
                             foundAdapter.add("$ip  [LAN Port 9100]")
                         }
