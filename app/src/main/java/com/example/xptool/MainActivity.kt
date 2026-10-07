@@ -43,8 +43,11 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
+import java.util.Collections
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -277,7 +280,7 @@ class MainActivity : Activity() {
         else -> "LAN/WiFi ($printerIp:$printerPort)"
     }
 
-    private fun showHome() = showPage("XP Tool Pro", true) { b ->
+    private fun showHome() = showPage("XP Tool by QuangSonAIBAT", true) { b ->
         b.addView(label("Đang chọn kết nối: ${connTypeName()}", 14f, true))
         b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
         b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, đổi IP 1 chạm, bật DHCP") { pageNetwork() })
@@ -437,7 +440,7 @@ class MainActivity : Activity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
 
-        b.addView(btn("Tìm máy in trong mạng (UDP Broadcast)") {
+        b.addView(btn("Tìm máy in trong mạng (UDP Broadcast - Xprinter)") {
             found.clear()
             foundAdapter.clear()
             result.visibility = View.GONE
@@ -452,11 +455,24 @@ class MainActivity : Activity() {
             mainHandler.postDelayed({
                 if (found.isEmpty()) {
                     log(
-                        "Không thấy máy in nào. Kiểm tra: cùng mạng/router, máy in đã bật và cắm LAN, " +
-                            "thử tắt dữ liệu di động."
+                        "Không thấy máy in Xprinter UDP. Bạn có thể dùng nút 'Quét dải IP LAN' bên dưới để quét Zywell/Epson."
                     )
                 }
             }, 4000)
+        })
+
+        b.addView(btn("Quét dải IP mạng LAN cổng 9100 (Zywell, Epson, Xprinter...)") {
+            scanLanPort9100 { ips ->
+                if (ips.isNotEmpty()) {
+                    val firstIp = ips.first()
+                    printerIp = firstIp
+                    connectType = POSConnect.DEVICE_TYPE_ETHERNET
+                    savePrinter()
+                    log("Đã tìm thấy ${ips.size} IP mở port 9100: ${ips.joinToString(", ")}. Tự động chọn $firstIp:9100")
+                } else {
+                    log("Không tìm thấy địa chỉ IP nào mở cổng 9100 trong dải WiFi hiện tại.")
+                }
+            }
         })
 
         result.addView(label("Máy in tìm thấy:", 15f, true))
@@ -586,6 +602,74 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // --------------------------------------------- QUÉT DẢI IP MẠNG LAN
+
+    private fun scanLanPort9100(onComplete: (List<String>) -> Unit) {
+        val pn = phoneNet()
+        if (pn == null) {
+            log("Không đọc được dải IP điện thoại. Hãy bật WiFi.")
+            onComplete(emptyList())
+            return
+        }
+        val prefix = "${pn.ip[0].toInt() and 0xFF}.${pn.ip[1].toInt() and 0xFF}.${pn.ip[2].toInt() and 0xFF}."
+        log("Đang quét siêu tốc 254 địa chỉ IP (${prefix}1 ~ ${prefix}254) cổng 9100...")
+
+        val foundIps = Collections.synchronizedList(mutableListOf<String>())
+        val executor = Executors.newFixedThreadPool(30)
+        val count = AtomicInteger(254)
+
+        for (i in 1..254) {
+            val ip = "$prefix$i"
+            executor.execute {
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress(ip, 9100), 400)
+                        foundIps.add(ip)
+                        log("✔ Phát hiện máy in mở cổng 9100 tại: $ip")
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    if (count.decrementAndGet() == 0) {
+                        executor.shutdown()
+                        runOnUiThread {
+                            onComplete(foundIps.sorted())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getConnectedSsid(): String? {
+        return try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val info = wm.connectionInfo ?: return null
+            var ssid = info.ssid ?: return null
+            if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                ssid = ssid.substring(1, ssid.length - 1)
+            }
+            if (ssid == "<unknown ssid>" || ssid.isEmpty()) null else ssid
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getNearbyWifiSsids(): List<String> {
+        return try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wm.startScan()
+            val results = wm.scanResults ?: return emptyList()
+            results.map { it.SSID }
+                .filter { !it.isNullOrBlank() && it != "<unknown ssid>" }
+                .distinct()
+                .sorted()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     // ------------------------------------------------------ TRANG 2: WIFI
 
     private fun pageWifi() = showPage("Cấu hình WiFi cho máy in", false) { b ->
@@ -606,7 +690,58 @@ class MainActivity : Activity() {
         b.addView(form)
 
         form.addView(label("Thông tin WiFi mới:", 15f, true))
-        val etSsid = edit("Tên WiFi (SSID)")
+
+        val wifiAdapter = ArrayAdapter<String>(
+            this, android.R.layout.simple_spinner_dropdown_item, mutableListOf<String>()
+        )
+        val spWifi = Spinner(this).apply { adapter = wifiAdapter }
+        val etSsidManual = edit("Hoặc gõ tay tên WiFi (SSID)")
+        etSsidManual.visibility = View.GONE
+        val cbManualSsid = CheckBox(this).apply { text = "Tự gõ tay tên WiFi (nếu WiFi bị ẩn)" }
+        cbManualSsid.setOnCheckedChangeListener { _, checked ->
+            etSsidManual.visibility = if (checked) View.VISIBLE else View.GONE
+            spWifi.visibility = if (checked) View.GONE else View.VISIBLE
+        }
+
+        fun refreshWifiList() {
+            wifiAdapter.clear()
+            val list = mutableListOf<String>()
+            val active = getConnectedSsid()
+            if (active != null) {
+                list.add(active)
+                log("Tự động chọn WiFi điện thoại đang kết nối: $active")
+            }
+            val nearby = getNearbyWifiSsids()
+            nearby.forEach { if (!list.contains(it)) list.add(it) }
+            if (list.isEmpty()) {
+                list.add("Không tìm thấy WiFi - Hãy bấm Quét")
+            }
+            wifiAdapter.addAll(list)
+            if (active != null) etSsidManual.setText(active)
+        }
+        refreshWifiList()
+
+        form.addView(label("Chọn tên WiFi (SSID) xung quanh hoặc của điện thoại:"))
+        form.addView(spWifi)
+        form.addView(row(
+            btn("Lấy WiFi điện thoại đang nối") {
+                val active = getConnectedSsid()
+                if (active != null) {
+                    val pos = (0 until wifiAdapter.count).firstOrNull { wifiAdapter.getItem(it) == active }
+                    if (pos != null) spWifi.setSelection(pos)
+                    etSsidManual.setText(active)
+                    log("Đã chọn WiFi điện thoại: $active")
+                } else {
+                    log("Không đọc được WiFi điện thoại. Hãy chắc chắn đã bật WiFi & Vị trí.")
+                }
+            } to 1f,
+            btn("Quét danh sách WiFi") {
+                refreshWifiList()
+            } to 1f
+        ))
+        form.addView(cbManualSsid)
+        form.addView(etSsidManual)
+
         val etPass = edit("Mật khẩu WiFi")
         val encAdapter = ArrayAdapter<String>(
             this, android.R.layout.simple_spinner_dropdown_item, encTypes.map { it.first }
@@ -625,15 +760,18 @@ class MainActivity : Activity() {
             ownPanel.visibility = if (checked) View.VISIBLE else View.GONE
         }
 
-        form.addView(etSsid)
         form.addView(etPass)
         form.addView(spEnc)
         form.addView(cbOwn)
         form.addView(ownPanel)
 
         form.addView(btn("Gửi cấu hình WiFi sang máy in") {
-            val ssid = etSsid.text.toString()
-            if (ssid.isEmpty()) return@btn log("SSID không được trống")
+            val ssid = if (cbManualSsid.isChecked) {
+                etSsidManual.text.toString()
+            } else {
+                spWifi.selectedItem?.toString() ?: etSsidManual.text.toString()
+            }
+            if (ssid.isEmpty() || ssid.startsWith("Không tìm thấy")) return@btn log("Tên WiFi (SSID) không hợp lệ")
             val ip: ByteArray
             val mask: ByteArray
             val gw: ByteArray
