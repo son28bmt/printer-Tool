@@ -603,6 +603,7 @@ class MainActivity : Activity() {
             }
         })
         b.addView(status)
+        b.addView(form)
 
         form.addView(label("Thông tin WiFi mới:", 15f, true))
         val etSsid = edit("Tên WiFi (SSID)")
