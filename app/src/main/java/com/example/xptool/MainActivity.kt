@@ -1064,33 +1064,18 @@ class MainActivity : Activity() {
 
         // ---- chuyen che do
         val modePanel = column().apply { visibility = View.GONE }
-        modePanel.addView(label("Dành cho các dòng máy in 2 chế độ (XP-365B, XP-350B, XP-235B...):", 13f))
-        modePanel.addView(btn("Chuyển sang Chế độ IN TEM NHÃN (TSPL Mode)") {
-            val switchTspl = bytes(0x1F, 0x1B, 0x1F, 0x54, 0x53, 0x50, 0x4C)
-            sendPrintData("Chuyển TSPL Mode", switchTspl)
-            log("Đã gửi lệnh chuyển Chế độ In Tem (TSPL). Tắt mở lại máy in để áp dụng.")
-        })
-        modePanel.addView(btn("Chuyển sang Chế độ IN HÓA ĐƠN (ESC/POS Mode)") {
-            val switchEsc = bytes(0x1F, 0x1B, 0x1F, 0x45, 0x53, 0x43)
-            sendPrintData("Chuyển ESC/POS Mode", switchEsc)
-            log("Đã gửi lệnh chuyển Chế độ In Hóa Đơn (ESC/POS). Tắt mở lại máy in để áp dụng.")
-        })
+        modePanel.addView(label("Chuyển chế độ TSPL / ESC/POS (Máy in 2 chế độ):", 13f, true))
+        modePanel.addView(label(
+            "Đối với máy in 2 chế độ (XP-365B, XP-350B...), cách an toàn và chính xác nhất là chuyển đổi bằng nút bấm cứng trên máy in (giữ nút Feed khi bật nguồn) hoặc sử dụng công cụ Diagnostic Tool chính thức của hãng trên máy tính."
+        ))
         b.addView(modePanel)
 
         // ---- reset factory
         val resetPanel = column().apply { visibility = View.GONE }
-        resetPanel.addView(label("Khôi phục tất cả thông tin cài đặt máy in về mặc định nhà sản xuất.", 13f))
-        resetPanel.addView(btn("Gửi lệnh Khôi phục cài đặt gốc (Reset Factory)") {
-            AlertDialog.Builder(this)
-                .setTitle("Cảnh báo Khôi phục mặc định!")
-                .setMessage("Máy in sẽ tự khôi phục IP mặc định (192.168.1.87 hoặc 192.168.4.2) và tự tắt mở lại. Tiếp tục?")
-                .setPositiveButton("Khôi phục") { _, _ ->
-                    val factoryBytes = bytes(0x1B, 0x40, 0x1F, 0x1B, 0x1F, 0x53, 0x54, 0x41, 0x52, 0x54) // ESC @ + Reset
-                    sendPrintData("Reset Factory", factoryBytes)
-                }
-                .setNegativeButton("Hủy", null)
-                .show()
-        })
+        resetPanel.addView(label("Khôi phục cài đặt gốc (Reset Factory):", 13f, true))
+        resetPanel.addView(label(
+            "Để khôi phục IP và cài đặt mặc định của máy in về nhà sản xuất, vui lòng tắt máy in, giữ nút PAUSE/FEED và bật nguồn lại (theo hướng dẫn của từng model) hoặc dùng công cụ Diagnostic Tool trên PC qua cáp USB."
+        ))
         b.addView(resetPanel)
 
         rg.setOnCheckedChangeListener { _, id ->
