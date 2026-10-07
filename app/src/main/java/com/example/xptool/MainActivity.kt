@@ -61,6 +61,7 @@ class MainActivity : Activity() {
     private var printerPort = 9100
     private var btMac = ""
     private var usbPath = ""
+    private var paperWidth = 58
 
     private var etIpCur: EditText? = null
     private var etPortCur: EditText? = null
@@ -313,7 +314,8 @@ class MainActivity : Activity() {
         else -> "LAN/WiFi ($printerIp:$printerPort)"
     }
 
-    private fun showHome() = showPage("XP Tool by QuangSonAIBAT", true) { b ->
+    private fun showHome() {
+        showPage("XP Tool by QuangSonAIBAT", true) { b ->
         val active = PrinterManager.getActivePrinter()
         if (active != null) {
             printerIp = active.ip
@@ -489,6 +491,7 @@ class MainActivity : Activity() {
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
+    }
     }
 
     private fun pageDiagnostics() = showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
