@@ -728,6 +728,12 @@ class MainActivity : Activity() {
             val c = etCode.text.toString()
             sendPrintData("In tem nhãn TSPL", getTsplLabelBytes(t, p, c))
         })
+        b.addView(label("Cấu hình chế độ máy in:", 14f, true))
+        b.addView(btn("Chuyển máy in sang Chế độ In Tem Nhãn (TSPL)") {
+            val switchTspl = bytes(0x1F, 0x1B, 0x1F, 0x54, 0x53, 0x50, 0x4C)
+            sendPrintData("Chuyển TSPL Mode", switchTspl)
+            log("Đã gửi lệnh chuyển chế độ In Tem (TSPL). Hãy tắt mở lại máy in để áp dụng.")
+        })
     }
 
     // ---------------------------------------------- TRANG 6: CÔNG CỤ NÂNG CAO
@@ -736,9 +742,11 @@ class MainActivity : Activity() {
         val rg = RadioGroup(this)
         val rbRaw = radio("Gửi gói thô (hex)")
         val rbListen = radio("Nghe UDP")
+        val rbMode = radio("Chuyển chế độ máy in (In Tem TSPL ↔ In Bill ESC/POS)")
         val rbReset = radio("Khôi phục cài đặt gốc (Reset Factory)")
         rg.addView(rbRaw)
         rg.addView(rbListen)
+        rg.addView(rbMode)
         rg.addView(rbReset)
         b.addView(rg)
 
@@ -790,6 +798,21 @@ class MainActivity : Activity() {
         })
         b.addView(listenPanel)
 
+        // ---- chuyen che do
+        val modePanel = column().apply { visibility = View.GONE }
+        modePanel.addView(label("Dành cho các dòng máy in 2 chế độ (XP-365B, XP-350B, XP-235B...):", 13f))
+        modePanel.addView(btn("Chuyển sang Chế độ IN TEM NHÃN (TSPL Mode)") {
+            val switchTspl = bytes(0x1F, 0x1B, 0x1F, 0x54, 0x53, 0x50, 0x4C)
+            sendPrintData("Chuyển TSPL Mode", switchTspl)
+            log("Đã gửi lệnh chuyển Chế độ In Tem (TSPL). Tắt mở lại máy in để áp dụng.")
+        })
+        modePanel.addView(btn("Chuyển sang Chế độ IN HÓA ĐƠN (ESC/POS Mode)") {
+            val switchEsc = bytes(0x1F, 0x1B, 0x1F, 0x45, 0x53, 0x43)
+            sendPrintData("Chuyển ESC/POS Mode", switchEsc)
+            log("Đã gửi lệnh chuyển Chế độ In Hóa Đơn (ESC/POS). Tắt mở lại máy in để áp dụng.")
+        })
+        b.addView(modePanel)
+
         // ---- reset factory
         val resetPanel = column().apply { visibility = View.GONE }
         resetPanel.addView(label("Khôi phục tất cả thông tin cài đặt máy in về mặc định nhà sản xuất.", 13f))
@@ -809,6 +832,7 @@ class MainActivity : Activity() {
         rg.setOnCheckedChangeListener { _, id ->
             rawPanel.visibility = if (id == rbRaw.id) View.VISIBLE else View.GONE
             listenPanel.visibility = if (id == rbListen.id) View.VISIBLE else View.GONE
+            modePanel.visibility = if (id == rbMode.id) View.VISIBLE else View.GONE
             resetPanel.visibility = if (id == rbReset.id) View.VISIBLE else View.GONE
         }
         rg.check(rbRaw.id)
