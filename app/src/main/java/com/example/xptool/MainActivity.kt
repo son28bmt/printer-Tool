@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.net.wifi.WifiManager
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -479,6 +481,7 @@ class MainActivity : Activity() {
         }
 
         b.addView(label("Menu tính năng:", 15f, true))
+        b.addView(menuBtn("🔍 Chẩn đoán kết nối 1 chạm", "Tự động kiểm tra WiFi, Router, IP máy in, nắp máy & nạp giấy") { pageDiagnostics() })
         b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
         b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
         b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
@@ -486,6 +489,116 @@ class MainActivity : Activity() {
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
+    }
+
+    private fun pageDiagnostics() = showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
+        val active = PrinterManager.getActivePrinter()
+        val targetName = active?.name ?: "Chưa chọn máy in"
+        val targetInfo = active?.let { "${it.ip}:${it.port}" } ?: ""
+
+        b.addView(label("Đang chẩn đoán máy in: $targetName ($targetInfo)", 14f, true))
+        b.addView(label("Hệ thống sẽ lần lượt kiểm tra 6 bước theo thứ tự ưu tiên:", 12f))
+
+        val stepsCol = column()
+        val stepViews = mutableMapOf<Int, TextView>()
+
+        for (i in 1..6) {
+            val tvStep = TextView(this).apply {
+                text = "⏳ Bước $i: Chờ kiểm tra..."
+                textSize = 13f
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                setBackgroundColor(0xFFEEEEEE.toInt())
+            }
+            stepViews[i] = tvStep
+            stepsCol.addView(tvStep)
+            stepsCol.addView(View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4))
+            })
+        }
+        b.addView(stepsCol)
+
+        val resultCard = column().apply {
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            visibility = View.GONE
+        }
+        val tvConclusionTitle = label("KẾT LUẬN CHẨN ĐOÁN:", 15f, true)
+        val tvConclusion = label("", 14f)
+        val btnAction = Button(this).apply {
+            visibility = View.GONE
+            isAllCaps = false
+        }
+
+        resultCard.addView(tvConclusionTitle)
+        resultCard.addView(tvConclusion)
+        resultCard.addView(btnAction)
+        b.addView(resultCard)
+
+        val btnStart = btn("🚀 Bắt đầu Chẩn đoán 1 chạm") {
+            resultCard.visibility = View.GONE
+            for (i in 1..6) {
+                stepViews[i]?.text = "⏳ Bước $i: Đang kiểm tra..."
+                stepViews[i]?.setBackgroundColor(0xFFFFF9C4.toInt())
+            }
+
+            DiagnosticHelper.runDiagnostics(
+                context = this@MainActivity,
+                udp = udp,
+                targetPrinter = active,
+                onStepUpdate = { step ->
+                    runOnUiThread {
+                        val tv = stepViews[step.stepIndex]
+                        if (tv != null) {
+                            if (step.isOk) {
+                                tv.text = "✔ ${step.title}\n   ${step.message}"
+                                tv.setBackgroundColor(0xFFE8F5E9.toInt())
+                                tv.setTextColor(0xFF1B5E20.toInt())
+                            } else {
+                                tv.text = "✘ ${step.title}\n   ${step.message}"
+                                tv.setBackgroundColor(0xFFFFEBEE.toInt())
+                                tv.setTextColor(0xFFB71C1C.toInt())
+                            }
+                        }
+                    }
+                },
+                onFinished = { failure ->
+                    runOnUiThread {
+                        resultCard.visibility = View.VISIBLE
+                        if (failure == null) {
+                            resultCard.setBackgroundColor(0xFFE8F5E9.toInt())
+                            tvConclusion.text = "🎉 Mọi thứ đều ổn! Máy in và mạng WiFi kết nối hoàn hảo."
+                            btnAction.visibility = View.VISIBLE
+                            btnAction.text = "In thử ngay"
+                            btnAction.setOnClickListener {
+                                sendPrintData("In thử sau chẩn đoán", getReceiptDemoBytes())
+                            }
+                        } else {
+                            resultCard.setBackgroundColor(0xFFFFEBEE.toInt())
+                            tvConclusion.text = "⚠ Phát hiện sự cố tại ${failure.title}:\n\n${failure.message}"
+
+                            if (failure.actionType == DiagnosticActionType.OPEN_WIFI_SETTINGS) {
+                                btnAction.visibility = View.VISIBLE
+                                btnAction.text = "Mở Cài đặt WiFi"
+                                btnAction.setOnClickListener {
+                                    try {
+                                        startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                                    } catch (_: Exception) {
+                                    }
+                                }
+                            } else if (failure.actionType == DiagnosticActionType.CHANGE_PRINTER_IP) {
+                                btnAction.visibility = View.VISIBLE
+                                btnAction.text = "Đổi IP máy in về cùng dải WiFi"
+                                btnAction.setOnClickListener {
+                                    pageNetwork()
+                                }
+                            } else {
+                                btnAction.visibility = View.GONE
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        b.addView(btnStart)
     }
 
     private fun pageAbout() = showPage("Thông tin & Bảo mật", false) { b ->
@@ -1325,6 +1438,16 @@ class MainActivity : Activity() {
                 PrinterManager.resolvePrinter(this, udp, active, onLog = { log(it) }) { resolvedIp ->
                     if (resolvedIp == null) {
                         log("✘ Không thể gửi lệnh in: Máy in ${active.name} (${active.ip}) không phản hồi mạng.")
+                        runOnUiThread {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Kết nối máy in thất bại")
+                                .setMessage("Không thể kết nối tới ${active.name} (${active.ip}). Bạn có muốn chạy Chẩn đoán 1 chạm để phát hiện nguyên nhân không?")
+                                .setPositiveButton("Chẩn đoán ngay") { _, _ ->
+                                    pageDiagnostics()
+                                }
+                                .setNegativeButton("Đóng", null)
+                                .show()
+                        }
                     } else {
                         printerIp = resolvedIp
                         sendTcp(resolvedIp, targetPort(), data, label)
