@@ -72,7 +72,7 @@ class MainActivity : Activity() {
     private var logScroll: ScrollView? = null
 
     private val udp = PosUdpNet()
-    private val found = mutableListOf<UdpDevice>()
+    private val found = Collections.synchronizedList(mutableListOf<UdpDevice>())
     private var multicastLock: WifiManager.MulticastLock? = null
 
     private val udpCallback = UdpCallback { d -> onFound(d) }
@@ -134,14 +134,34 @@ class MainActivity : Activity() {
     }
 
     private fun checkBtPermission() {
+        val perms = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val btConn = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
-            val btScan = checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
-            if (btConn != PackageManager.PERMISSION_GRANTED || btScan != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(
-                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION),
-                    101
-                )
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission("android.permission.NEARBY_WIFI_DEVICES") != PackageManager.PERMISSION_GRANTED) {
+                perms.add("android.permission.NEARBY_WIFI_DEVICES")
+            }
+        }
+        if (perms.isNotEmpty()) {
+            requestPermissions(perms.toTypedArray(), 101)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            if (!granted) {
+                log("Một số quyền chưa được cấp. Các tính năng quét WiFi/Bluetooth có thể bị hạn chế.")
             }
         }
     }
