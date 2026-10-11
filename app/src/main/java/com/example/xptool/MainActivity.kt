@@ -8,6 +8,9 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -200,11 +203,25 @@ class MainActivity : Activity() {
 
     fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    private val colorBackground = Color.rgb(246, 248, 251)
+    private val colorSurface = Color.WHITE
+    private val colorText = Color.rgb(31, 41, 55)
+    private val colorMuted = Color.rgb(100, 116, 139)
+    private val colorAccent = Color.rgb(37, 99, 235)
+
+    private fun roundedBackground(color: Int, radius: Int = 14, strokeColor: Int? = null) =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+            strokeColor?.let { setStroke(dp(1), it) }
+        }
+
     fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
     fun label(t: String, size: Float = 14f, bold: Boolean = false) = TextView(this).apply {
         text = t
         textSize = size
+        setTextColor(colorText)
         if (bold) typeface = Typeface.DEFAULT_BOLD
         setPadding(0, dp(6), 0, dp(6))
     }
@@ -219,15 +236,42 @@ class MainActivity : Activity() {
     fun btn(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
         isAllCaps = false
+        backgroundTintList = ColorStateList.valueOf(colorAccent)
+        setTextColor(Color.WHITE)
         setOnClickListener { onClick() }
     }
 
-    fun menuBtn(title: String, sub: String, onClick: () -> Unit) = Button(this).apply {
-        text = "$title\n$sub"
-        isAllCaps = false
-        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+    fun menuBtn(title: String, sub: String, onClick: () -> Unit) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(16), dp(12), dp(16), dp(12))
+        background = roundedBackground(colorSurface, strokeColor = Color.rgb(229, 234, 241))
+        isClickable = true
+        isFocusable = true
         setOnClickListener { onClick() }
+
+        val textColumn = column()
+        textColumn.addView(TextView(this@MainActivity).apply {
+            text = title
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorText)
+        })
+        textColumn.addView(TextView(this@MainActivity).apply {
+            text = sub
+            textSize = 12f
+            setTextColor(colorMuted)
+            setPadding(0, dp(3), 0, 0)
+        })
+        addView(textColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(TextView(this@MainActivity).apply {
+            text = "›"
+            textSize = 26f
+            setTextColor(colorAccent)
+        })
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(8)
+        }
     }
 
     fun row(vararg items: Pair<View, Float>) = LinearLayout(this).apply {
@@ -250,17 +294,24 @@ class MainActivity : Activity() {
             mainHandler.removeCallbacks(autoRefreshRunnable)
         }
 
-        val root = column().apply { setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val root = column().apply {
+            setPadding(dp(16), dp(10), dp(16), dp(12))
+            setBackgroundColor(colorBackground)
+        }
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         if (!isHome) header.addView(btn("←") { showHome() })
-        header.addView(label(title, 20f, true))
+        header.addView(label(title, 20f, true).apply {
+            setTextColor(colorText)
+            setPadding(dp(4), dp(8), 0, dp(10))
+        })
         root.addView(header)
 
         val body = column()
+        body.setPadding(0, dp(4), 0, dp(10))
         build(body)
         root.addView(
             ScrollView(this).apply { addView(body) },
@@ -268,7 +319,7 @@ class MainActivity : Activity() {
         )
         root.addView(
             logBox(),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(170))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118))
         )
         setContentView(root)
     }
@@ -279,8 +330,13 @@ class MainActivity : Activity() {
             textSize = 11f
             text = logBuffer.toString()
             setTextIsSelectable(true)
+            setTextColor(colorMuted)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
         }
-        val sv = ScrollView(this).apply { addView(tv) }
+        val sv = ScrollView(this).apply {
+            background = roundedBackground(colorSurface, strokeColor = Color.rgb(229, 234, 241))
+            addView(tv)
+        }
         logView = tv
         logScroll = sv
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
@@ -412,7 +468,10 @@ class MainActivity : Activity() {
             PrinterManager.savedPrinters.forEach { p ->
                 val card = column().apply {
                     setPadding(dp(12), dp(10), dp(12), dp(10))
-                    setBackgroundColor(if (p.id == PrinterManager.activePrinterId) 0xFFE8F5E9.toInt() else 0xFFF5F5F5.toInt())
+                    background = roundedBackground(
+                        if (p.id == PrinterManager.activePrinterId) Color.rgb(235, 243, 255) else colorSurface,
+                        strokeColor = if (p.id == PrinterManager.activePrinterId) Color.rgb(191, 214, 255) else Color.rgb(229, 234, 241)
+                    )
                 }
                 val dotStr = when (p.status) {
                     PrinterStatus.ONLINE -> "● Online"
@@ -552,20 +611,26 @@ class MainActivity : Activity() {
             b.addView(listCol)
         }
 
-        b.addView(label("Menu tính năng:", 15f, true))
+        b.addView(label("Kết nối máy in", 15f, true))
         b.addView(menuBtn("🔍 Chẩn đoán kết nối 1 chạm", "Tự động kiểm tra WiFi, Router, IP máy in, nắp máy & nạp giấy") { pageDiagnostics() })
-                b.addView(menuBtn("0. Quản lý Máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy") { pageManagePrinters() })
-b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
+        b.addView(menuBtn("0. Quản lý Máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy") { pageManagePrinters() })
+        b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
         b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
+
+        b.addView(label("Thiết lập và in", 15f, true))
         b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
         b.addView(menuBtn("4. In mẫu Hóa đơn & Mã vạch QR", "In Receipt Demo, mã vạch 1D, QR Code thanh toán") { pagePrintReceipt() })
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
-        b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
-        b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
-        b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
         b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
+
+        b.addView(label("Chia sẻ và tự động hóa", 15f, true))
         b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
         b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
+
+        b.addView(label("Tiện ích", 15f, true))
+        b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
+        b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
+        b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
     }
 
         mainHandler.removeCallbacks(autoRefreshRunnable)
