@@ -1109,12 +1109,11 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                 .setPositiveButton("Lưu") { _, _ ->
                     val name = etName.text.toString().trim().ifEmpty { defaultName }
                     val newSaved = SavedPrinter(
-                        id = if (mac.isNotEmpty()) mac else selectedIp,
                         name = name,
-                        mac = mac,
-                        ip = selectedIp,
+                        mac = mac.takeIf { it.isNotEmpty() },
+                        lastIp = selectedIp,
                         port = printerPort,
-                        connectType = POSConnect.DEVICE_TYPE_ETHERNET,
+                        connType = POSConnect.DEVICE_TYPE_ETHERNET,
                         paperWidth = paperWidth
                     )
                     PrinterManager.addOrUpdatePrinter(this, newSaved)
