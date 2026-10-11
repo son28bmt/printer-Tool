@@ -1,4 +1,4 @@
-package com.example.xptool
+﻿package com.example.xptool
 
 import android.content.Context
 import android.net.wifi.WifiManager
@@ -168,7 +168,7 @@ object DiagnosticHelper {
                 )
 
                 // Bước 5: Broadcast UDP tìm lại theo MAC
-                if (targetPrinter.mac.isNotEmpty()) {
+                if (!targetPrinter.mac.isNullOrEmpty()) {
                     reportStep(
                         DiagnosticStepResult(
                             stepIndex = 5,

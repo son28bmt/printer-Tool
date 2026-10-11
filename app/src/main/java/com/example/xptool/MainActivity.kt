@@ -287,7 +287,7 @@ class MainActivity : Activity() {
         return sv
     }
 
-    private fun log(msg: String) {
+    fun log(msg: String) {
         val line = "[${timeFmt.format(Date())}] $msg\n"
         runOnUiThread {
             logBuffer.append(line)
@@ -442,7 +442,7 @@ class MainActivity : Activity() {
                 row1.addView(tvStatus, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
                 val subText = if (p.connectType == POSConnect.DEVICE_TYPE_ETHERNET) {
-                    "IP: ${p.ip}:${p.port}" + (if (p.mac.isNotEmpty()) " | MAC: ${p.mac}" else " | Cổng 9100") + " | Khổ giấy: ${p.paperWidth}mm"
+                    "IP: ${p.ip}:${p.port}" + (if (!p.mac.isNullOrEmpty()) " | MAC: ${p.mac}" else " | Cổng 9100") + " | Khổ giấy: ${p.paperWidth}mm"
                 } else if (p.connectType == POSConnect.DEVICE_TYPE_BLUETOOTH) {
                     "Bluetooth MAC: ${p.btMac}"
                 } else {
@@ -904,7 +904,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
         }
     }
 
-    private fun pageNetwork() = showPage("Tìm máy in LAN & Đổi IP", false) { b ->
+    private fun pageNetwork(): Unit { showPage("Tìm máy in LAN & Đổi IP", false) { b ->
         val pn0 = phoneNet()
         b.addView(
             label(
@@ -1202,6 +1202,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
             found.forEach { foundAdapter.add(foundLabel(it)) }
             result.visibility = View.VISIBLE
         }
+    }
     }
 
     private fun onFound(d: UdpDevice) {
