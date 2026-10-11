@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * CÃ¡c háº±ng sá»‘ Ä‘á»‹nh cáº¥u hÃ¬nh kho mÃ¡y in vÃ  dÃ² tÃ¬m IP (khÃ´ng dÃ¹ng magic number).
+ * Các hằng số định cấu hình kho máy in và dò tìm IP (không dùng magic number).
  */
 const val PREF_FILE_XP_PRINTERS = "xp_printers"
 const val PREF_KEY_PRINTER_LIST = "xp_printers"
@@ -25,11 +25,11 @@ const val UDP_SEARCH_STEP_MS = 100L
 const val STATUS_CHECK_POOL_SIZE = 10
 
 /**
- * Dá»¯ liá»‡u má»™t mÃ¡y in Ä‘Ã£ lÆ°u theo Giai Ä‘oáº¡n A.
+ * Dữ liệu một máy in đã lưu theo Giai đoạn A.
  */
 data class SavedPrinter(
-    var name: String,           // "Quáº§y 1"
-    var mac: String? = null,    // null náº¿u mÃ¡y khÃ´ng cÃ³ MAC (tÃ¬m báº±ng quÃ©t cá»•ng, hoáº·c nháº­p tay)
+    var name: String,           // "Quầy 1"
+    var mac: String? = null,    // null nếu máy không có MAC (tìm bằng quét cổng, hoặc nhập tay)
     var lastIp: String = "192.168.1.100",
     var port: Int = 9100,
     var connType: Int = POSConnect.DEVICE_TYPE_ETHERNET, // POSConnect.DEVICE_TYPE_*
@@ -39,11 +39,11 @@ data class SavedPrinter(
     var btMac: String = "",
     var usbPath: String = ""
 ) {
-    // KhÃ³a Ä‘á»‹nh danh duy nháº¥t: theo MAC náº¿u cÃ³, náº¿u khÃ´ng thÃ¬ theo lastIp:port
+    // Khóa định danh duy nhất: theo MAC nếu có, nếu không thì theo lastIp:port
     val id: String
         get() = if (!mac.isNullOrBlank()) mac!! else "$lastIp:$port"
 
-    // CÃ¡c thuá»™c tÃ­nh tÆ°Æ¡ng thÃ­ch ngÆ°á»£c cho codebase hiá»‡n cÃ³
+    // Các thuộc tính tương thích ngược cho codebase hiện có
     var ip: String
         get() = lastIp
         set(value) { lastIp = value }
@@ -81,7 +81,7 @@ data class SavedPrinter(
         put("paperWidth", paperWidth)
         put("btMac", btMac)
         put("usbPath", usbPath)
-        // Key phá»¥ trá»£ tÆ°Æ¡ng thÃ­ch ngÆ°á»£c
+        // Key phụ trợ tương thích ngược
         put("id", id)
         put("ip", lastIp)
         put("connectType", connType)
@@ -93,7 +93,7 @@ data class SavedPrinter(
             val macVal = if (rawMac.isEmpty() || rawMac.equals("null", ignoreCase = true) || rawMac == "00:00:00:00:00:00") null else rawMac
             val ipVal = json.optString("lastIp", "").ifEmpty { json.optString("ip", "192.168.1.100") }
             val portVal = json.optInt("port", 9100)
-            val nameVal = json.optString("name", "MÃ¡y in $ipVal")
+            val nameVal = json.optString("name", "Máy in $ipVal")
             val connTypeVal = json.optInt("connType", json.optInt("connectType", POSConnect.DEVICE_TYPE_ETHERNET))
             val lastSeenVal = json.optLong("lastSeenEpochMs", json.optLong("lastSeen", System.currentTimeMillis()))
             val lastStatusVal = json.optString("lastStatus", "unknown")
@@ -123,7 +123,7 @@ object PrinterStore {
     val printers = Collections.synchronizedList(mutableListOf<SavedPrinter>())
     var activePrinterKey: String? = null
 
-    // Giá»¯ tham chiáº¿u máº¡nh tá»›i callback UDP theo Luáº­t 5
+    // Giữ tham chiếu mạnh tới callback UDP theo Luật 5
     @Volatile
     private var activeUdpCallback: UdpCallback? = null
 
@@ -135,6 +135,31 @@ object PrinterStore {
     private fun getPrefs(): SharedPreferences? {
         val ctx = appContext ?: return null
         return ctx.getSharedPreferences(PREF_FILE_XP_PRINTERS, Context.MODE_PRIVATE)
+    }
+
+    fun loadScanRanges(): MutableList<String> {
+        val prefs = getPrefs() ?: return DefaultScanRanges.BUILTIN_RANGES.toMutableList()
+        val raw = prefs.getString("scan_ranges", null) ?: return DefaultScanRanges.BUILTIN_RANGES.toMutableList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length())
+                .mapNotNull { array.optString(it, null) }
+                .filter(::isValidScanRange)
+                .distinct()
+                .toMutableList()
+        } catch (_: Exception) {
+            DefaultScanRanges.BUILTIN_RANGES.toMutableList()
+        }
+    }
+
+    fun saveScanRanges(ranges: List<String>) {
+        val cleanRanges = ranges.map { it.trim() }.filter(::isValidScanRange).distinct()
+        getPrefs()?.edit()?.putString("scan_ranges", JSONArray(cleanRanges).toString())?.apply()
+    }
+
+    private fun isValidScanRange(range: String): Boolean {
+        if (!range.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\."))) return false
+        return range.dropLast(1).split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }
     }
 
     fun loadAll(): List<SavedPrinter> {
@@ -152,7 +177,7 @@ object PrinterStore {
                     } catch (_: Exception) {
                     }
                 } else {
-                    // Di chuyá»ƒn dá»¯ liá»‡u cÅ© tá»« "xp_printer_manager" náº¿u cÃ³
+                    // Di chuyển dữ liệu cũ từ "xp_printer_manager" nếu có
                     val oldPrefs = appContext?.getSharedPreferences("xp_printer_manager", Context.MODE_PRIVATE)
                     val oldJson = oldPrefs?.getString("saved_printers_v2", null) 
                         ?: oldPrefs?.getString("saved_printers", null)
@@ -188,9 +213,9 @@ object PrinterStore {
     }
 
     /**
-     * LÆ°u hoáº·c cáº­p nháº­t mÃ¡y in:
-     * - Theo mac náº¿u cÃ³ (!= null)
-     * - Theo (lastIp + port) náº¿u khÃ´ng cÃ³ mac
+     * Lưu hoặc cập nhật máy in:
+     * - Theo mac nếu có (!= null)
+     * - Theo (lastIp + port) nếu không có mac
      */
     fun saveOrUpdate(p: SavedPrinter) {
         synchronized(printers) {
@@ -214,9 +239,9 @@ object PrinterStore {
     }
 
     /**
-     * XÃ³a mÃ¡y in:
-     * - Theo mac náº¿u mac != null
-     * - Theo fallbackIp náº¿u khÃ´ng cÃ³ mac
+     * Xóa máy in:
+     * - Theo mac nếu mac != null
+     * - Theo fallbackIp nếu không có mac
      */
     fun delete(mac: String?, fallbackIp: String) {
         synchronized(printers) {
@@ -235,7 +260,7 @@ object PrinterStore {
     }
 
     /**
-     * Äá»•i tÃªn mÃ¡y in
+     * Đổi tên máy in
      */
     fun rename(mac: String?, fallbackIp: String, newName: String) {
         synchronized(printers) {
@@ -267,7 +292,7 @@ object PrinterStore {
     }
 
     /**
-     * LÃ m má»›i tráº¡ng thÃ¡i toÃ n bá»™ danh sÃ¡ch mÃ¡y in (Online / Offline / Checking).
+     * Làm mới trạng thái toàn bộ danh sách máy in (Online / Offline / Checking).
      */
     fun refreshAllStatuses(onFinished: () -> Unit) {
         thread {
@@ -305,7 +330,7 @@ object PrinterStore {
                 }
             }
 
-            // Náº¿u cÃ³ mÃ¡y in cÃ³ MAC bá»‹ offline, thá»­ quÃ©t UDP má»™t lÆ°á»£t Ä‘á»ƒ xem cÃ³ Ä‘á»•i IP khÃ´ng
+            // Nếu có máy in có MAC bị offline, thử quét UDP một lượt để xem có đổi IP không
             if (offlineMacPrinters.isNotEmpty()) {
                 val foundDevices = Collections.synchronizedList(mutableListOf<UdpDevice>())
                 val udp = PosUdpNet()
@@ -347,19 +372,19 @@ object PrinterStore {
     }
 
     /**
-     * HÃ m lÃµi cá»§a Giai Ä‘oáº¡n A: resolvePrinter.
-     * Thuáº­t toÃ¡n, cháº¡y á»Ÿ luá»“ng ná»n:
-     * 1. tcpConnectWithTimeout(p.lastIp, p.port, DEFAULT_TCP_TIMEOUT_MS). ThÃ nh cÃ´ng -> onResolved(p.lastIp, false), cáº­p nháº­t lastSeenEpochMs, káº¿t thÃºc.
-     * 2. Tháº¥t báº¡i vÃ  p.mac != null: gá»i PosUdpNet.searchNetDevice, chá» tá»‘i Ä‘a ~3 giÃ¢y, tÃ¬m thiáº¿t bá»‹ cÃ³ MAC khá»›p.
-     *    - Tháº¥y, IP khÃ¡c p.lastIp -> cáº­p nháº­t lastIp trong store, onResolved(ipMá»›i, true).
-     *    - Tháº¥y, IP giá»‘ng -> váº«n gá»i tcpConnectWithTimeout láº¡i 1 láº§n ná»¯a (phÃ²ng trÆ°á»ng há»£p máº¡ng cháº­p chá»n), rá»“i quyáº¿t Ä‘á»‹nh.
-     *    - KhÃ´ng tháº¥y -> onFailed("KhÃ´ng tÃ¬m tháº¥y mÃ¡y in trong máº¡ng (Ä‘Ã£ thá»­ cáº£ IP cÅ© vÃ  dÃ² theo MAC). Náº¿u mÃ¡y á»Ÿ dáº£i máº¡ng khÃ¡c Ä‘Ã£ Ä‘Æ°á»£c Ä‘á»‹nh tuyáº¿n, hÃ£y kiá»ƒm tra láº¡i IP báº±ng tay.")
-     * 3. Tháº¥t báº¡i vÃ  p.mac == null (mÃ¡y in khÃ´ng theo dÃµi Ä‘Æ°á»£c báº±ng MAC, vÃ­ dá»¥ tÃ¬m báº±ng quÃ©t cá»•ng hoáº·c nháº­p tay):
-     *    khÃ´ng gá»i broadcast (vÃ´ Ã­ch vÃ¬ khÃ´ng cÃ³ MAC Ä‘á»ƒ so khá»›p) -> onFailed("MÃ¡y in khÃ´ng cÃ³ MAC Ä‘á»ƒ tá»± dÃ² láº¡i. IP cÃ³ thá»ƒ Ä‘Ã£ Ä‘á»•i, hÃ£y quÃ©t hoáº·c nháº­p IP má»›i.") ngay sau bÆ°á»›c 1 tháº¥t báº¡i.
+     * Hàm lõi của Giai đoạn A: resolvePrinter.
+     * Thuật toán, chạy ở luồng nền:
+     * 1. tcpConnectWithTimeout(p.lastIp, p.port, DEFAULT_TCP_TIMEOUT_MS). Thành công -> onResolved(p.lastIp, false), cập nhật lastSeenEpochMs, kết thúc.
+     * 2. Thất bại và p.mac != null: gọi PosUdpNet.searchNetDevice, chờ tối đa ~3 giây, tìm thiết bị có MAC khớp.
+     *    - Thấy, IP khác p.lastIp -> cập nhật lastIp trong store, onResolved(ipMới, true).
+     *    - Thấy, IP giống -> vẫn gọi tcpConnectWithTimeout lại 1 lần nữa (phòng trường hợp mạng chập chờn), rồi quyết định.
+     *    - Không thấy -> onFailed("Không tìm thấy máy in trong mạng (đã thử cả IP cũ và dò theo MAC). Nếu máy ở dải mạng khác đã được định tuyến, hãy kiểm tra lại IP bằng tay.")
+     * 3. Thất bại và p.mac == null (máy in không theo dõi được bằng MAC, ví dụ tìm bằng quét cổng hoặc nhập tay):
+     *    không gọi broadcast (vô ích vì không có MAC để so khớp) -> onFailed("Máy in không có MAC để tự dò lại. IP có thể đã đổi, hãy quét hoặc nhập IP mới.") ngay sau bước 1 thất bại.
      */
     /**
-     * XÃ¡c Ä‘á»‹nh IP mÃ¡y in má»™t cÃ¡ch Ä‘á»“ng bá»™ (dÃ¹ng trong luá»“ng worker cá»§a PrintQueue).
-     * Tráº£ vá» IP há»£p lá»‡ (IP má»›i náº¿u Ä‘á»•i), hoáº·c null náº¿u tháº¥t báº¡i.
+     * Xác định IP máy in một cách đồng bộ (dùng trong luồng worker của PrintQueue).
+     * Trả về IP hợp lệ (IP mới nếu đổi), hoặc null nếu thất bại.
      */
     fun resolvePrinterSync(
         p: SavedPrinter,
@@ -369,7 +394,7 @@ object PrinterStore {
             return p.lastIp
         }
 
-        // BÆ°á»›c 1: Thá»­ TCP trá»±c tiáº¿p vá»›i timeout DEFAULT_TCP_TIMEOUT_MS
+        // Bước 1: Thử TCP trực tiếp với timeout DEFAULT_TCP_TIMEOUT_MS
         val tcpOk = tcpConnectWithTimeout(p.lastIp, p.port, DEFAULT_TCP_TIMEOUT_MS)
         if (tcpOk) {
             p.lastSeenEpochMs = System.currentTimeMillis()
@@ -378,17 +403,17 @@ object PrinterStore {
             return p.lastIp
         }
 
-        // BÆ°á»›c 3: Tháº¥t báº¡i vÃ  p.mac == null -> KhÃ´ng thá»ƒ dÃ² theo MAC
+        // Bước 3: Thất bại và p.mac == null -> Không thể dò theo MAC
         if (p.mac.isNullOrBlank()) {
             p.lastStatus = "offline"
             saveOrUpdate(p)
-            onLog?.invoke("MÃ¡y in ${p.name} (${p.lastIp}) khÃ´ng cÃ³ MAC Ä‘á»ƒ tá»± dÃ² láº¡i. HÃ£y kiá»ƒm tra káº¿t ná»‘i máº¡ng hoáº·c nháº­p IP má»›i.")
+            onLog?.invoke("Máy in ${p.name} (${p.lastIp}) không có MAC để tự dò lại. Hãy kiểm tra kết nối mạng hoặc nhập IP mới.")
             return null
         }
 
-        // BÆ°á»›c 2: Tháº¥t báº¡i vÃ  p.mac != null -> DÃ² UDP Broadcast theo MAC
+        // Bước 2: Thất bại và p.mac != null -> Dò UDP Broadcast theo MAC
         val targetMac = p.mac!!
-        onLog?.invoke("MÃ¡y in ${p.name} (${p.lastIp}) khÃ´ng pháº£n há»“i TCP. Äang broadcast UDP dÃ² tÃ¬m theo MAC [$targetMac]...")
+        onLog?.invoke("Máy in ${p.name} (${p.lastIp}) không phản hồi TCP. Đang broadcast UDP dò tìm theo MAC [$targetMac]...")
 
         val foundDevices = Collections.synchronizedList(mutableListOf<UdpDevice>())
         val udp = PosUdpNet()
@@ -429,7 +454,7 @@ object PrinterStore {
         if (matchedDevice != null) {
             val newIp = extractIp(matchedDevice)
             if (newIp.isNotEmpty() && newIp != p.lastIp) {
-                onLog?.invoke("TÃ¬m tháº¥y mÃ¡y in! IP Ä‘Ã£ Ä‘á»•i: ${p.lastIp} âž” $newIp")
+                onLog?.invoke("Tìm thấy máy in! IP đã đổi: ${p.lastIp} ➔ $newIp")
                 p.lastIp = newIp
                 p.lastSeenEpochMs = System.currentTimeMillis()
                 p.lastStatus = "online"
@@ -443,7 +468,7 @@ object PrinterStore {
                     saveOrUpdate(p)
                     return p.lastIp
                 } else {
-                    onLog?.invoke("MÃ¡y in pháº£n há»“i UDP táº¡i IP ${p.lastIp} nhÆ°ng khÃ´ng thá»ƒ káº¿t ná»‘i cá»•ng ${p.port} qua TCP.")
+                    onLog?.invoke("Máy in phản hồi UDP tại IP ${p.lastIp} nhưng không thể kết nối cổng ${p.port} qua TCP.")
                     p.lastStatus = "offline"
                     saveOrUpdate(p)
                     return null
@@ -451,14 +476,14 @@ object PrinterStore {
             }
         }
 
-        onLog?.invoke("KhÃ´ng tÃ¬m tháº¥y mÃ¡y in trong máº¡ng theo MAC [$targetMac].")
+        onLog?.invoke("Không tìm thấy máy in trong mạng theo MAC [$targetMac].")
         p.lastStatus = "offline"
         saveOrUpdate(p)
         return null
     }
 
     /**
-     * HÃ m lÃµi cá»§a Giai Ä‘oáº¡n A: resolvePrinter (cháº¡y báº¥t Ä‘á»“ng bá»™ qua thread).
+     * Hàm lõi của Giai đoạn A: resolvePrinter (chạy bất đồng bộ qua thread).
      */
     fun resolvePrinter(
         p: SavedPrinter,
@@ -478,9 +503,9 @@ object PrinterStore {
                 onResolved(resolvedIp, isChanged)
             } else {
                 if (p.mac.isNullOrBlank()) {
-                    onFailed("MÃ¡y in khÃ´ng cÃ³ MAC Ä‘á»ƒ tá»± dÃ² láº¡i. IP cÃ³ thá»ƒ Ä‘Ã£ Ä‘á»•i, hÃ£y quÃ©t hoáº·c nháº­p IP má»›i.")
+                    onFailed("Máy in không có MAC để tự dò lại. IP có thể đã đổi, hãy quét hoặc nhập IP mới.")
                 } else {
-                    onFailed("KhÃ´ng tÃ¬m tháº¥y mÃ¡y in trong máº¡ng (Ä‘Ã£ thá»­ cáº£ IP cÅ© vÃ  dÃ² theo MAC). Náº¿u mÃ¡y á»Ÿ dáº£i máº¡ng khÃ¡c Ä‘Ã£ Ä‘Æ°á»£c Ä‘á»‹nh tuyáº¿n, hÃ£y kiá»ƒm tra láº¡i IP báº±ng tay.")
+                    onFailed("Không tìm thấy máy in trong mạng (đã thử cả IP cũ và dò theo MAC). Nếu máy ở dải mạng khác đã được định tuyến, hãy kiểm tra lại IP bằng tay.")
                 }
             }
         }

@@ -9,16 +9,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * CÃ¡c háº±ng sá»‘ cáº¥u hÃ¬nh máº¡ng cho Giai Ä‘oáº¡n A (khÃ´ng dÃ¹ng magic number).
+ * Các hằng số cấu hình mạng cho Giai đoạn A (không dùng magic number).
  */
 const val DEFAULT_TCP_TIMEOUT_MS = 800
 const val DEFAULT_PING_TIMEOUT_MS = 500
 const val SCAN_MAX_PARALLEL = 30
 
 /**
- * Kiá»ƒm tra káº¿t ná»‘i TCP tá»›i IP:Port vá»›i timeout xÃ¡c Ä‘á»‹nh.
- * DÃ¹ng java.net.Socket().use { it.connect(...) }.
- * Tráº£ vá» true/false, khÃ´ng nÃ©m ngoáº¡i lá»‡ ra ngoÃ i.
+ * Kiểm tra kết nối TCP tới IP:Port với timeout xác định.
+ * Dùng java.net.Socket().use { it.connect(...) }.
+ * Trả về true/false, không ném ngoại lệ ra ngoài.
  */
 fun tcpConnectWithTimeout(
     ip: String,
@@ -36,10 +36,10 @@ fun tcpConnectWithTimeout(
 }
 
 /**
- * Gá»­i ICMP Ping kiá»ƒm tra mÃ¡y chá»§ (InetAddress.getByName(ip).isReachable).
- * LÆ¯U Ã: ICMP ping cÃ³ thá»ƒ bá»‹ cháº·n bá»Ÿi tÆ°á»ng lá»­a/switch máº¡ng dÃ¹ mÃ¡y in váº«n Ä‘ang hoáº¡t Ä‘á»™ng.
- * Káº¿t quáº£ nÃ y chá»‰ dÃ¹ng lÃ m gá»£i Ã½, KHÃ”NG dÃ¹ng lÃ m Ä‘iá»u kiá»‡n quyáº¿t Ä‘á»‹nh duy nháº¥t.
- * LuÃ´n Æ°u tiÃªn káº¿t quáº£ cá»§a tcpConnectWithTimeout khi hai káº¿t quáº£ mÃ¢u thuáº«n.
+ * Gửi ICMP Ping kiểm tra máy chủ (InetAddress.getByName(ip).isReachable).
+ * LƯU Ý: ICMP ping có thể bị chặn bởi tường lửa/switch mạng dù máy in vẫn đang hoạt động.
+ * Kết quả này chỉ dùng làm gợi ý, KHÔNG dùng làm điều kiện quyết định duy nhất.
+ * Luôn ưu tiên kết quả của tcpConnectWithTimeout khi hai kết quả mâu thuẫn.
  */
 fun pingHost(
     ip: String,
@@ -53,16 +53,16 @@ fun pingHost(
 }
 
 /**
- * QuÃ©t dáº£i IP tÃ¹y chá»‰nh theo cá»•ng chá»‰ Ä‘á»‹nh (máº·c Ä‘á»‹nh 9100).
- * - baseIp3Octets: vÃ­ dá»¥ "192.168.1." hoáº·c "192.168.1"
- * - startHost: host báº¯t Ä‘áº§u (máº·c Ä‘á»‹nh 1)
- * - endHost: host káº¿t thÃºc (máº·c Ä‘á»‹nh 254)
- * - onEachFound: gá»i NGAY khi phÃ¡t hiá»‡n 1 IP thÃ nh cÃ´ng Ä‘á»ƒ UI cáº­p nháº­t dáº§n dáº§n, khÃ´ng pháº£i Ä‘á»£i quÃ©t háº¿t
- * - onProgress: gá»i sau má»—i IP Ä‘Æ°á»£c kiá»ƒm tra Ä‘á»ƒ cáº­p nháº­t thanh tiáº¿n trÃ¬nh (done: sá»‘ Ä‘Ã£ xong, total: tá»•ng sá»‘)
- * - onComplete: gá»i khi toÃ n bá»™ dáº£i quÃ©t xong hoáº·c khi tiáº¿n trÃ¬nh káº¿t thÃºc
+ * Quét dải IP tùy chỉnh theo cổng chỉ định (mặc định 9100).
+ * - baseIp3Octets: ví dụ "192.168.1." hoặc "192.168.1"
+ * - startHost: host bắt đầu (mặc định 1)
+ * - endHost: host kết thúc (mặc định 254)
+ * - onEachFound: gọi NGAY khi phát hiện 1 IP thành công để UI cập nhật dần dần, không phải đợi quét hết
+ * - onProgress: gọi sau mỗi IP được kiểm tra để cập nhật thanh tiến trình (done: số đã xong, total: tổng số)
+ * - onComplete: gọi khi toàn bộ dải quét xong hoặc khi tiến trình kết thúc
  * 
- * Tráº£ vá» má»™t hÃ m cancel() Ä‘á»ƒ dá»«ng giá»¯a chá»«ng. QuÃ¡ trÃ¬nh dá»«ng Ä‘Æ°á»£c kiá»ƒm tra tháº­t qua AtomicBoolean
- * vÃ  shutdownNow() trÃªn ExecutorService.
+ * Trả về một hàm cancel() để dừng giữa chừng. Quá trình dừng được kiểm tra thật qua AtomicBoolean
+ * và shutdownNow() trên ExecutorService.
  */
 fun scanCustomRange(
     baseIp3Octets: String,
@@ -114,12 +114,77 @@ fun scanCustomRange(
                     }
                 }
             } catch (_: Exception) {
-                // Executor cÃ³ thá»ƒ bá»‹ Ä‘Ã³ng khi há»§y giá»¯a chá»«ng
+                // Executor có thể bị đóng khi hủy giữa chừng
             }
         }
     }
 
     return cancelFunc
+}
+
+data class MultiRangeScanSummary(
+    val rangesScanned: Int,
+    val addressesChecked: Int,
+    val printersFound: Int
+)
+
+fun scanAllRangesSequentially(
+    ranges: List<String>,
+    port: Int = 9100,
+    onEachFound: (String) -> Unit,
+    onRangeProgress: (rangeIndex: Int, totalRanges: Int, rangePrefix: String) -> Unit,
+    onFinalComplete: (MultiRangeScanSummary) -> Unit
+): () -> Unit {
+    val validRanges = ranges.map { it.trim() }
+        .filter { range ->
+            range.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.")) &&
+                range.dropLast(1).split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }
+        }
+        .distinct()
+    val cancelled = AtomicBoolean(false)
+    val completed = AtomicBoolean(false)
+    val rangesStarted = AtomicInteger(0)
+    val addressesChecked = AtomicInteger(0)
+    val found = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    val activeCancel = java.util.concurrent.atomic.AtomicReference<(() -> Unit)?>(null)
+
+    fun finish() {
+        if (completed.compareAndSet(false, true)) {
+            onFinalComplete(MultiRangeScanSummary(rangesStarted.get(), addressesChecked.get(), found.size))
+        }
+    }
+
+    fun scanNext(index: Int) {
+        if (cancelled.get() || index >= validRanges.size) {
+            finish()
+            return
+        }
+        val prefix = validRanges[index]
+        rangesStarted.incrementAndGet()
+        onRangeProgress(index + 1, validRanges.size, prefix)
+        activeCancel.set(
+            scanCustomRange(
+                baseIp3Octets = prefix,
+                startHost = 1,
+                endHost = 254,
+                port = port,
+                timeoutMs = DEFAULT_TCP_TIMEOUT_MS,
+                maxParallel = SCAN_MAX_PARALLEL,
+                onEachFound = { ip -> if (found.add(ip)) onEachFound(ip) },
+                onProgress = { _, _ -> addressesChecked.incrementAndGet() },
+                onComplete = { if (cancelled.get()) finish() else scanNext(index + 1) }
+            )
+        )
+        if (cancelled.get()) activeCancel.get()?.invoke()
+    }
+
+    if (validRanges.isEmpty()) finish() else scanNext(0)
+    return {
+        if (cancelled.compareAndSet(false, true)) {
+            activeCancel.get()?.invoke()
+            finish()
+        }
+    }
 }
 
 object NetworkUtil {

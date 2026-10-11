@@ -366,7 +366,7 @@ class MainActivity : Activity() {
         savePrinter()
     }
 
-    private fun pageManagePrinters() = showPage("MÃ¡y in cá»§a tÃ´i", false) { b ->
+    private fun pageManagePrinters() = showPage("Máy in của tôi", false) { b ->
         ManagePrintersPage.buildView(this, b, { label, data -> sendPrintData(label, data) }, { msg -> log(msg) })
     }
 
@@ -554,7 +554,7 @@ class MainActivity : Activity() {
 
         b.addView(label("Menu tính năng:", 15f, true))
         b.addView(menuBtn("🔍 Chẩn đoán kết nối 1 chạm", "Tự động kiểm tra WiFi, Router, IP máy in, nắp máy & nạp giấy") { pageDiagnostics() })
-                b.addView(menuBtn("0. Quáº£n lÃ½ MÃ¡y in cá»§a tÃ´i", "Xem danh sÃ¡ch, thÃªm theo IP, Ä‘á»•i tÃªn, xÃ³a, Ä‘á»•i khá»• giáº¥y") { pageManagePrinters() })
+                b.addView(menuBtn("0. Quản lý Máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy") { pageManagePrinters() })
 b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
         b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
         b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
@@ -986,35 +986,35 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                 }
             }
         })
-        b.addView(btn("âž• ThÃªm mÃ¡y in theo IP (khÃ´ng cáº§n quÃ©t - Äa dáº£i máº¡ng)") {
+        b.addView(btn("➕ Thêm máy in theo IP (không cần quét - Đa dải mạng)") {
             ManagePrintersPage.showAddManualPrinterDialog(this@MainActivity) {
                 pageNetwork()
             }
         })
 
-        // Báº£ng quÃ©t dáº£i IP tÃ¹y chá»‰nh (cho máº¡ng nhiá»u dáº£i IP cÃ³ Ä‘á»‹nh tuyáº¿n)
+        // Bảng quét dải IP tùy chỉnh (cho mạng nhiều dải IP có định tuyến)
         val customScanPanel = column().apply {
             visibility = View.GONE
             setPadding(dp(10), dp(8), dp(10), dp(8))
             setBackgroundColor(0xFFEDE7F6.toInt())
         }
         val prefixSuggested = pn0?.let { "${it.ip[0].toInt() and 0xFF}.${it.ip[1].toInt() and 0xFF}.${it.ip[2].toInt() and 0xFF}." } ?: "192.168.1."
-        val etBaseOctets = edit("3 Octet Ä‘áº§u (vd: 192.168.1.)", prefixSuggested, IPTYPE)
+        val etBaseOctets = edit("3 Octet đầu (vd: 192.168.1.)", prefixSuggested, IPTYPE)
         val etStartHost = edit("Tá»« Host (1-254)", "1", InputType.TYPE_CLASS_NUMBER)
-        val etEndHost = edit("Äáº¿n Host (1-254)", "254", InputType.TYPE_CLASS_NUMBER)
+        val etEndHost = edit("Đến Host (1-254)", "254", InputType.TYPE_CLASS_NUMBER)
         val etPort = edit("Cá»•ng in TCP", "9100", InputType.TYPE_CLASS_NUMBER)
-        val tvCustomProgress = label("Nháº­p dáº£i máº¡ng IP cáº§n quÃ©t rá»“i báº¥m 'Báº¯t Ä‘áº§u quÃ©t'. QuÃ¡ trÃ¬nh cÃ³ thá»ƒ dá»«ng báº¥t cá»© lÃºc nÃ o.")
+        val tvCustomProgress = label("Nhập dải mạng IP cần quét rồi bấm 'Bắt đầu quét'. Quá trình có thể dừng bất cứ lúc nào.")
 
         var cancelCustomScan: (() -> Unit)? = null
         var isCustomScanning = false
-        val btnRunCustomScan = btn("â–¶ Báº¯t Ä‘áº§u quÃ©t dáº£i IP") {}
+        val btnRunCustomScan = btn("▶ Bắt đầu quét dải IP") {}
         btnRunCustomScan.setOnClickListener {
             if (isCustomScanning) {
                 cancelCustomScan?.invoke()
                 isCustomScanning = false
-                btnRunCustomScan.text = "â–¶ Báº¯t Ä‘áº§u quÃ©t dáº£i IP"
-                tvCustomProgress.text = "ÄÃ£ dá»«ng quÃ©t giá»¯a chá»«ng."
-                log("ÄÃ£ dá»«ng tiáº¿n trÃ¬nh quÃ©t dáº£i IP tÃ¹y chá»‰nh.")
+                btnRunCustomScan.text = "▶ Bắt đầu quét dải IP"
+                tvCustomProgress.text = "Đã dừng quét giữa chừng."
+                log("Đã dừng tiến trình quét dải IP tùy chỉnh.")
             } else {
                 val prefix = etBaseOctets.text.toString().trim()
                 val sHost = etStartHost.text.toString().trim().toIntOrNull() ?: 1
@@ -1022,14 +1022,14 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                 val targetPortNum = etPort.text.toString().trim().toIntOrNull() ?: 9100
 
                 if (prefix.isEmpty()) {
-                    log("Vui lÃ²ng nháº­p 3 octet Ä‘áº§u cá»§a dáº£i IP (vd: 192.168.1.)")
+                    log("Vui lòng nhập 3 octet đầu của dải IP (vd: 192.168.1.)")
                     return@setOnClickListener
                 }
 
                 isCustomScanning = true
-                btnRunCustomScan.text = "â¹ Dá»«ng quÃ©t"
-                tvCustomProgress.text = "Äang quÃ©t song song dáº£i $prefix$sHost ~ $prefix$eHost (cá»•ng $targetPortNum)..."
-                log("Báº¯t Ä‘áº§u quÃ©t song song dáº£i IP: $prefix$sHost ~ $prefix$eHost cá»•ng $targetPortNum...")
+                btnRunCustomScan.text = "⏹ Dừng quét"
+                tvCustomProgress.text = "Đang quét song song dải $prefix$sHost ~ $prefix$eHost (cổng $targetPortNum)..."
+                log("Bắt đầu quét song song dải IP: $prefix$sHost ~ $prefix$eHost cổng $targetPortNum...")
 
                 cancelCustomScan = scanCustomRange(
                     baseIp3Octets = prefix,
@@ -1048,36 +1048,130 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                                 result.visibility = View.VISIBLE
                                 refreshWarn()
                             }
-                            log("âœ… PhÃ¡t hiá»‡n mÃ¡y in pháº£n há»“i cá»•ng $targetPortNum táº¡i: $foundIp")
+                            log("✅ Phát hiện máy in phản hồi cổng $targetPortNum tại: $foundIp")
                         }
                     },
                     onProgress = { done, total ->
                         runOnUiThread {
-                            tvCustomProgress.text = "Äang quÃ©t: $done/$total IP..."
+                            tvCustomProgress.text = "Đang quét: $done/$total IP..."
                         }
                     },
                     onComplete = { foundList ->
                         runOnUiThread {
                             isCustomScanning = false
-                            btnRunCustomScan.text = "â–¶ Báº¯t Ä‘áº§u quÃ©t dáº£i IP"
-                            tvCustomProgress.text = "QuÃ©t hoÃ n táº¥t! TÃ¬m tháº¥y ${foundList.size} mÃ¡y in."
-                            log("QuÃ©t hoÃ n táº¥t dáº£i $prefix: tÃ¬m tháº¥y ${foundList.size} mÃ¡y in.")
+                            btnRunCustomScan.text = "▶ Bắt đầu quét dải IP"
+                            tvCustomProgress.text = "Quét hoàn tất! Tìm thấy ${foundList.size} máy in."
+                            log("Quét hoàn tất dải $prefix: tìm thấy ${foundList.size} máy in.")
                         }
                     }
                 )
             }
         }
 
-        customScanPanel.addView(label("QuÃ©t dáº£i IP tÃ¹y chá»‰nh (Há»— trá»£ máº¡ng Ä‘a dáº£i cÃ³ Ä‘á»‹nh tuyáº¿n):", 13f, true))
+        customScanPanel.addView(label("Quét dải IP tùy chỉnh (Hỗ trợ mạng đa dải có định tuyến):", 13f, true))
+        val scanRangeManager = column()
+        val scanRangeInput = EditText(this).apply {
+            hint = "Ví dụ: 192.168.1."
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        fun refreshScanRangeManager() {
+            scanRangeManager.removeAllViews()
+            PrinterStore.loadScanRanges().forEach { range ->
+                val removeButton = btn("Xóa") {
+                    val updated = PrinterStore.loadScanRanges().apply { remove(range) }
+                    PrinterStore.saveScanRanges(updated)
+                    refreshScanRangeManager()
+                }
+                scanRangeManager.addView(row(label(range) to 1f, removeButton to 0.35f))
+            }
+        }
+        scanRangeManager.addView(label("Quản lý danh sách dải quét", 14f, true))
+        scanRangeManager.addView(label("Danh sách chỉ là ước lượng các dải thường gặp. Mạng của bạn có thể dùng dải khác; hãy thêm dải nếu biết chính xác."))
+        scanRangeManager.addView(row(
+            scanRangeInput to 1f,
+            btn("Thêm dải") {
+                val range = scanRangeInput.text.toString().trim()
+                val valid = range.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.")) &&
+                    range.dropLast(1).split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }
+                if (!valid) {
+                    log("Dải không hợp lệ. Hãy nhập dạng x.x.x., ví dụ 192.168.1.")
+                } else {
+                    val updated = PrinterStore.loadScanRanges()
+                    if (range !in updated) updated.add(range)
+                    PrinterStore.saveScanRanges(updated)
+                    scanRangeInput.text.clear()
+                    refreshScanRangeManager()
+                }
+            } to 0.65f
+        ))
+        scanRangeManager.addView(btn("Khôi phục danh sách mặc định") {
+            PrinterStore.saveScanRanges(DefaultScanRanges.BUILTIN_RANGES)
+            refreshScanRangeManager()
+        })
+        refreshScanRangeManager()
+
+        val quickScanProgress = label("")
+        var isQuickScanning = false
+        var cancelQuickScan: (() -> Unit)? = null
+        var quickScanStartedAt = 0L
+        val quickScanButton = btn("Quét nhanh các dải mạng phổ biến") {}
+        quickScanButton.setOnClickListener {
+            if (isQuickScanning) {
+                cancelQuickScan?.invoke()
+            } else {
+                val ranges = PrinterStore.loadScanRanges()
+                val targetPort = etPort.text.toString().trim().toIntOrNull() ?: 9100
+                if (ranges.isEmpty()) {
+                    log("Danh sách dải quét đang trống.")
+                    return@setOnClickListener
+                }
+                isQuickScanning = true
+                quickScanStartedAt = System.currentTimeMillis()
+                quickScanButton.text = "Dừng quét nhanh"
+                quickScanProgress.text = "Đang chuẩn bị quét ${ranges.size} dải..."
+                cancelQuickScan = scanAllRangesSequentially(
+                    ranges = ranges,
+                    port = targetPort,
+                    onEachFound = { foundIp ->
+                        runOnUiThread {
+                            if (found.none { safeIpStr(it) == foundIp }) {
+                                val ipBytes = ip4(foundIp) ?: byteArrayOf(0, 0, 0, 0)
+                                found.add(createDummyUdpDevice(foundIp, ipBytes))
+                                foundAdapter.add("$foundIp  [Port $targetPort]")
+                            }
+                            result.visibility = View.VISIBLE
+                            log("Tìm thấy máy in tại $foundIp")
+                        }
+                    },
+                    onRangeProgress = { index, total, prefix ->
+                        runOnUiThread { quickScanProgress.text = "Đang quét dải $index/$total: ${prefix}x..." }
+                    },
+                    onFinalComplete = { summary ->
+                        runOnUiThread {
+                            isQuickScanning = false
+                            quickScanButton.text = "Quét nhanh các dải mạng phổ biến"
+                            cancelQuickScan = null
+                            val elapsedSeconds = (System.currentTimeMillis() - quickScanStartedAt) / 1000.0
+                            quickScanProgress.text = "Đã quét ${summary.rangesScanned} dải (${summary.addressesChecked} địa chỉ), tìm thấy ${summary.printersFound} máy in. Thời gian: ${"%.1f".format(elapsedSeconds)} giây."
+                        }
+                    }
+                )
+            }
+        }
+
         customScanPanel.addView(etBaseOctets)
         customScanPanel.addView(row(etStartHost to 1f, etEndHost to 1f, etPort to 1f))
         customScanPanel.addView(btnRunCustomScan)
         customScanPanel.addView(tvCustomProgress)
 
-        b.addView(btn("ðŸŒ QuÃ©t dáº£i IP tÃ¹y chá»‰nh (Port 9100 - Äa dáº£i máº¡ng)") {
+        b.addView(btn("🌐 Quét dải IP tùy chỉnh (Port 9100 - Đa dải mạng)") {
             customScanPanel.visibility = if (customScanPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         })
         b.addView(customScanPanel)
+        b.addView(quickScanButton)
+        b.addView(quickScanProgress)
+        b.addView(scanRangeManager)
 
         result.addView(label("Máy in tìm thấy (chọn để sử dụng):", 15f, true))
         result.addView(spFound)
@@ -1446,20 +1540,20 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
     ) {
         val active = if (connectType == POSConnect.DEVICE_TYPE_ETHERNET) PrinterStore.getActivePrinter() else null
         if (active != null) {
-            log("Äang xÃ¡c thá»±c káº¿t ná»‘i mÃ¡y in [${active.name}] (${active.lastIp}) trÆ°á»›c khi gá»­i cáº¥u hÃ¬nh WiFi...")
+            log("Đang xác thực kết nối máy in [${active.name}] (${active.lastIp}) trước khi gửi cấu hình WiFi...")
             PrinterStore.resolvePrinter(
                 active,
                 onResolved = { resolvedIp, viaBroadcastUpdate ->
                     runOnUiThread {
                         printerIp = resolvedIp
                         if (viaBroadcastUpdate) {
-                            log("IP mÃ¡y in Ä‘Ã£ tá»± Ä‘á»•i: ${active.lastIp} âž” $resolvedIp")
+                            log("IP máy in đã tự đổi: ${active.lastIp} ➔ $resolvedIp")
                         }
                         doConnectAndSendWifiConfig(ssid, pass, enc, ip, mask, gw)
                     }
                 },
                 onFailed = { reason ->
-                    log("Cáº¥u hÃ¬nh WiFi tháº¥t báº¡i: $reason")
+                    log("Cấu hình WiFi thất bại: $reason")
                 }
             )
         } else {
@@ -1471,18 +1565,18 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
         ssid: String, pass: String, enc: Byte,
         ip: ByteArray, mask: ByteArray, gw: ByteArray
     ) {
-        log("Äang má»Ÿ káº¿t ná»‘i SDK tá»›i ${connTypeName()} ...")
+        log("Đang mở kết nối SDK tới ${connTypeName()} ...")
         val conn = createSdkConnect()
         val listener = IConnectListener { code, _, msg ->
             when (code) {
                 POSConnect.CONNECT_SUCCESS -> {
-                    log("ÄÃ£ káº¿t ná»‘i SDK. Gá»­i cáº¥u hÃ¬nh WiFi SSID='$ssid' ...")
+                    log("Đã kết nối SDK. Gửi cấu hình WiFi SSID='$ssid' ...")
                     POSPrinter(conn).wifiConfig(ip, mask, gw, ssid, pass, enc)
-                    log("ÄÃ£ gá»­i xong! Táº¯t má»Ÿ láº¡i mÃ¡y in Ä‘á»ƒ mÃ¡y in ná»‘i vÃ o WiFi má»›i.")
+                    log("Đã gửi xong! Tắt mở lại máy in để máy in nối vào WiFi mới.")
                     mainHandler.postDelayed({ conn.close() }, 2000)
                 }
-                POSConnect.CONNECT_FAIL -> log("Káº¿t ná»‘i SDK tháº¥t báº¡i: $msg")
-                else -> log("Tráº¡ng thÃ¡i SDK: code=$code $msg")
+                POSConnect.CONNECT_FAIL -> log("Kết nối SDK thất bại: $msg")
+                else -> log("Trạng thái SDK: code=$code $msg")
             }
         }
         connListener = listener
@@ -1603,7 +1697,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                             sendTcp(resolvedIp, port, data, "raw")
                         },
                         onFailed = { reason ->
-                            log("Gá»­i gÃ³i thÃ´ tháº¥t báº¡i: $reason")
+                            log("Gửi gói thô thất bại: $reason")
                         }
                     )
                 } else {
@@ -1680,7 +1774,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
             val printerKey = if (active != null) active.id else "manual:${targetIp()}:${targetPort()}"
             val displayName = active?.name ?: targetIp()
 
-            log("ÄÆ°a lá»‡nh in [$label] vÃ o hÃ ng Ä‘á»£i cho $displayName (KhÃ³a: $printerKey)...")
+            log("Đưa lệnh in [$label] vào hàng đợi cho $displayName (Khóa: $printerKey)...")
 
             PrintQueue.enqueue(
                 printerKey = printerKey,
@@ -1704,20 +1798,20 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                     runOnUiThread {
                         if (success) {
                             if (attempts > 1) {
-                                log("âœ… In [$label] thÃ nh cÃ´ng á»Ÿ láº§n thá»­ thá»© $attempts (sau khi tá»± Ä‘á»™ng thá»­ láº¡i).")
+                                log("✅ In [$label] thành công ở lần thử thứ $attempts (sau khi tự động thử lại).")
                             } else {
-                                log("âœ… In [$label] thÃ nh cÃ´ng.")
+                                log("✅ In [$label] thành công.")
                             }
                         } else {
-                            log("âŒ Gá»­i lá»‡nh in [$label] tá»›i $displayName tháº¥t báº¡i sau $attempts láº§n thá»­.")
+                            log("❌ Gửi lệnh in [$label] tới $displayName thất bại sau $attempts lần thử.")
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("In tháº¥t báº¡i ($attempts láº§n thá»­)")
                                 .setMessage(
-                                    "KhÃ´ng thá»ƒ káº¿t ná»‘i hoáº·c gá»­i dá»¯ liá»‡u tá»›i $displayName sau $attempts láº§n thá»­ (Ä‘Ã£ thá»­ láº¡i vá»›i Ä‘á»™ trá»… 1s, 3s).\n\n" +
-                                    "Vui lÃ²ng kiá»ƒm tra cÃ¡p máº¡ng, nguá»“n Ä‘iá»‡n mÃ¡y in hoáº·c dáº£i máº¡ng."
+                                    "Không thể kết nối hoặc gửi dữ liệu tới $displayName sau $attempts lần thử (đã thử lại với độ trễ 1s, 3s).\n\n" +
+                                    "Vui lòng kiểm tra cáp mạng, nguồn điện máy in hoặc dải mạng."
                                 )
-                                .setPositiveButton("Cháº©n Ä‘oÃ¡n ngay") { _, _ -> pageDiagnostics() }
-                                .setNegativeButton("ÄÃ³ng", null)
+                                .setPositiveButton("Chẩn đoán ngay") { _, _ -> pageDiagnostics() }
+                                .setNegativeButton("Đóng", null)
                                 .show()
                         }
                     }
@@ -1726,9 +1820,9 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
             return
         }
 
-        // Bluetooth / USB OTG qua hÃ ng Ä‘á»£i thiáº¿t bá»‹ pháº§n cá»©ng
+        // Bluetooth / USB OTG qua hàng đợi thiết bị phần cứng
         val hardwareKey = if (connectType == POSConnect.DEVICE_TYPE_BLUETOOTH) "bt:$btMac" else "usb:$usbPath"
-        log("ÄÆ°a lá»‡nh in [$label] vÃ o hÃ ng Ä‘á»£i thiáº¿t bá»‹ (${connTypeName()})...")
+        log("Đưa lệnh in [$label] vào hàng đợi thiết bị (${connTypeName()})...")
 
         PrintQueue.enqueue(
             printerKey = hardwareKey,
@@ -1739,7 +1833,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                 val listener = IConnectListener { code, _, msg ->
                     when (code) {
                         POSConnect.CONNECT_SUCCESS -> {
-                            log("ÄÃ£ káº¿t ná»‘i SDK. Gá»­i dá»¯ liá»‡u [$label] (${data.size} byte)...")
+                            log("Đã kết nối SDK. Gửi dữ liệu [$label] (${data.size} byte)...")
                             conn.sendData(data)
                             sentSuccess.set(true)
                             mainHandler.postDelayed({ conn.close() }, 1000)
@@ -1751,7 +1845,7 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
                             latch.countDown()
                         }
                         else -> {
-                            log("Tráº¡ng thÃ¡i SDK: code=$code $msg")
+                            log("Trạng thái SDK: code=$code $msg")
                         }
                     }
                 }
@@ -1768,9 +1862,9 @@ b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng L
             onResult = { success, attempts ->
                 runOnUiThread {
                     if (success) {
-                        log("âœ… Gá»­i [$label] qua ${connTypeName()} thÃ nh cÃ´ng.")
+                        log("✅ Gửi [$label] qua ${connTypeName()} thành công.")
                     } else {
-                        log("âŒ Gá»­i [$label] qua ${connTypeName()} tháº¥t báº¡i sau $attempts láº§n thá»­.")
+                        log("❌ Gửi [$label] qua ${connTypeName()} thất bại sau $attempts lần thử.")
                     }
                 }
             }
@@ -1970,18 +2064,18 @@ PRINT 1,1
                     write(data)
                     flush()
                 }
-                log("TCP âž” $ip:$port [$label] ${data.size} byte: ${hex(data)}")
+                log("tcp ➔ $ip:$port [$label] ${data.size} byte: ${hex(data)}")
                 s.soTimeout = 1500
                 try {
                     val buf = ByteArray(1024)
                     val n = s.getInputStream().read(buf)
-                    if (n > 0) log("TCP ïƒ§ ${hex(buf, n)}  |${ascii(buf, n)}|")
+                    if (n > 0) log("tcp  ${hex(buf, n)}  |${ascii(buf, n)}|")
                 } catch (_: SocketTimeoutException) {
                 }
             }
             true
         } catch (e: Exception) {
-            log("TCP lá»—i $ip:$port [$label]: ${e.javaClass.simpleName}: ${e.message}")
+            log("TCP lỗi $ip:$port [$label]: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }
@@ -1998,7 +2092,7 @@ PRINT 1,1
                     s.broadcast = broadcast
                     s.soTimeout = 1000
                     s.send(DatagramPacket(data, data.size, InetAddress.getByName(ip), port))
-                    log("UDP → $ip:$port ${data.size} byte (cổng nguồn ${s.localPort}): ${hex(data)}")
+                    log("udp → $ip:$port ${data.size} byte (cổng nguồn ${s.localPort}): ${hex(data)}")
                     val end = System.currentTimeMillis() + 3000
                     var got = 0
                     while (System.currentTimeMillis() < end) {

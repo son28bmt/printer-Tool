@@ -13,8 +13,8 @@ enum class PrinterStatus {
 }
 
 /**
- * Lá»›p tÆ°Æ¡ng thÃ­ch ngÆ°á»£c cho PrinterManager.
- * Chuyá»ƒn tiáº¿p cÃ¡c lá»i gá»i sang PrinterStore vÃ  NetworkUtil.
+ * Lớp tương thích ngược cho PrinterManager.
+ * Chuyển tiếp các lời gọi sang PrinterStore và NetworkUtil.
  */
 object PrinterManager {
     val savedPrinters: MutableList<SavedPrinter>
@@ -35,7 +35,7 @@ object PrinterManager {
     }
 
     fun saveAll(context: Context) {
-        // PrinterStore tá»± Ä‘á»™ng lÆ°u qua persist() má»—i khi cÃ³ thay Ä‘á»•i
+        // PrinterStore tự động lưu qua persist() mỗi khi có thay đổi
     }
 
     fun addOrUpdatePrinter(context: Context, printer: SavedPrinter) {
@@ -86,7 +86,7 @@ object PrinterManager {
             printer,
             onResolved = { resolvedIp, viaBroadcastUpdate ->
                 if (viaBroadcastUpdate) {
-                    onLog("ÄÃ£ tÃ¬m tháº¥y mÃ¡y in! IP Ä‘Ã£ tá»± Ä‘á»•i sang $resolvedIp (theo MAC [${printer.mac}])")
+                    onLog("Đã tìm thấy máy in! IP đã tự đổi sang $resolvedIp (theo MAC [${printer.mac}])")
                 }
                 onResult(resolvedIp)
             },
