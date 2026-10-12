@@ -55,7 +55,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
-internal fun MainActivity.pageNetwork(): Unit { showPage("Tìm máy in LAN & Đổi IP", false) { b ->
+internal fun MainActivity.pageNetwork(): Unit {
+    val activity = this
+    showPage("Tìm máy in LAN & Đổi IP", false) { b ->
         val pn0 = phoneNet()
         b.addView(
             label(
@@ -138,7 +140,7 @@ internal fun MainActivity.pageNetwork(): Unit { showPage("Tìm máy in LAN & Đ�
             }
         })
         b.addView(btn("➕ Thêm máy in theo IP (không cần quét - Đa dải mạng)") {
-            ManagePrintersPage.showAddManualPrinterDialog(this@MainActivity) {
+            ManagePrintersPage.showAddManualPrinterDialog(activity) {
                 pageNetwork()
             }
         })
@@ -147,7 +149,7 @@ internal fun MainActivity.pageNetwork(): Unit { showPage("Tìm máy in LAN & Đ�
         val customScanPanel = column().apply {
             visibility = View.GONE
             setPadding(dp(10), dp(8), dp(10), dp(8))
-            this@MainActivity.styleCard(this)
+            activity.styleCard(this)
         }
         val prefixSuggested = pn0?.let { "${it.ip[0].toInt() and 0xFF}.${it.ip[1].toInt() and 0xFF}.${it.ip[2].toInt() and 0xFF}." } ?: "192.168.1."
         val etBaseOctets = edit("3 Octet đầu (vd: 192.168.1.)", prefixSuggested, IPTYPE)

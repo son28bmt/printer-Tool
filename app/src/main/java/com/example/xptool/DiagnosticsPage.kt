@@ -55,7 +55,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
-internal fun MainActivity.pageDiagnostics() = showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
+internal fun MainActivity.pageDiagnostics() {
+    val activity = this
+    showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
         val active = PrinterManager.getActivePrinter()
         val targetName = active?.name ?: "Chưa chọn máy in"
         val targetInfo = active?.let { "${it.ip}:${it.port}" } ?: ""
@@ -106,7 +108,7 @@ internal fun MainActivity.pageDiagnostics() = showPage("Chẩn đoán kết nố
             }
 
             DiagnosticHelper.runDiagnostics(
-                context = this@MainActivity,
+                context = activity,
                 udp = udp,
                 targetPrinter = active,
                 onStepUpdate = { step ->
@@ -165,5 +167,6 @@ internal fun MainActivity.pageDiagnostics() = showPage("Chẩn đoán kết nố
         }
         b.addView(btnStart)
     }
+}
 
 

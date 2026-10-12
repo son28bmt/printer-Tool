@@ -167,7 +167,7 @@ class MainActivity : Activity() {
         if (!currentPageIsHome) showHome() else super.onBackPressed()
     }
 
-    private fun checkBtPermission() {
+    internal fun checkBtPermission() {
         val perms = mutableListOf<String>()
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -475,7 +475,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun printerBar(): View {
+    internal fun printerBar(): View {
         val ip = edit("IP máy in", printerIp, IPTYPE)
         val port = edit("Cổng", printerPort.toString(), InputType.TYPE_CLASS_NUMBER)
         etIpCur = ip
