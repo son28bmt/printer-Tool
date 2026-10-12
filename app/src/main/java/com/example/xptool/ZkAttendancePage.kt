@@ -1,6 +1,7 @@
 package com.example.xptool
 
 import android.content.Intent
+import android.content.Context
 import android.text.InputType
 import android.view.View
 import android.widget.TextView
@@ -8,7 +9,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20", false) { body ->
-    val prefs = getSharedPreferences("zk_attendance", MODE_PRIVATE)
+    val prefs = getSharedPreferences("zk_attendance", Context.MODE_PRIVATE)
     val ipField = edit("IP máy chấm công", prefs.getString("ip", "") ?: "", InputType.TYPE_CLASS_TEXT)
     val portField = edit("Cổng TCP", prefs.getInt("port", 4370).toString(), InputType.TYPE_CLASS_NUMBER)
     val keyField = edit("Khóa giao tiếp (để 0 nếu máy không đặt)", "0", InputType.TYPE_CLASS_NUMBER)
@@ -55,7 +56,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
                     summary.text = "Đọc được ${punches.size} bản ghi${if (punches.isNotEmpty()) " · hiển thị tối đa 200 dòng mới nhất" else ""}"
                     punches.takeLast(200).asReversed().forEach { punch ->
                         rows.addView(TextView(this).apply {
-                            text = "${punch.time.format(formatter)}   •   ID ${punch.userId}   •   trạng thái ${punch.status}"
+                            text = "${formatter.format(punch.time)}   •   ID ${punch.userId}   •   trạng thái ${punch.status}"
                             textSize = 12f
                             setTextColor(colorText)
                             setPadding(0, dp(6), 0, dp(6))
@@ -84,7 +85,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         val csv = buildString {
             append("user_id,timestamp,status,verification_method\n")
             lastRecords.forEach { punch ->
-                append("\"${punch.userId.replace("\"", "\"\"")}\",${punch.time.format(formatter)},${punch.status},${punch.method}\n")
+                append("\"${punch.userId.replace("\"", "\"\"")}\",${formatter.format(punch.time)},${punch.status},${punch.method}\n")
             }
         }
         val send = Intent(Intent.ACTION_SEND).apply {
