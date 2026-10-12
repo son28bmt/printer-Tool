@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20", false) { body ->
+    val activity = this
     val prefs = getSharedPreferences("zk_attendance", Context.MODE_PRIVATE)
     val ipField = edit("IP máy chấm công", prefs.getString("ip", "") ?: "", InputType.TYPE_CLASS_TEXT)
     val portField = edit("Cổng TCP", prefs.getInt("port", 4370).toString(), InputType.TYPE_CLASS_NUMBER)
@@ -18,6 +19,73 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
     })
     body.addView(row(ipField to 2.2f, portField to 1f))
     body.addView(keyField)
+
+    val scanStatus = label("Quét mạng Wi‑Fi hiện tại để tìm thiết bị đang mở cổng 4370.", 12f).apply {
+        setTextColor(colorMuted)
+    }
+    body.addView(scanStatus)
+    val discoveredDevices = column()
+    body.addView(discoveredDevices)
+    var cancelScan: (() -> Unit)? = null
+    val scanButton = btn("Tự quét tìm máy chấm công") {}
+    scanButton.setOnClickListener {
+        val activeCancel = cancelScan
+        if (activeCancel != null) {
+            activeCancel()
+            cancelScan = null
+            scanButton.text = "Tự quét tìm máy chấm công"
+            scanStatus.text = "Đã dừng quét."
+            return@setOnClickListener
+        }
+        val network = phoneNet()
+        if (network == null) {
+            scanStatus.text = "Không đọc được mạng Wi‑Fi hiện tại. Kết nối Wi‑Fi rồi thử lại."
+            return@setOnClickListener
+        }
+        val prefix = "${network.ip[0].toInt() and 0xFF}.${network.ip[1].toInt() and 0xFF}.${network.ip[2].toInt() and 0xFF}."
+        val found = java.util.Collections.synchronizedList(mutableListOf<String>())
+        discoveredDevices.removeAllViews()
+        scanButton.text = "Dừng quét"
+        scanStatus.text = "Đang quét ${prefix}1–254 tại cổng 4370…"
+        log("Đang quét mạng $prefix để tìm máy chấm công ZKTeco trên cổng 4370.")
+        cancelScan = scanCustomRange(
+            baseIp3Octets = prefix,
+            startHost = 1,
+            endHost = 254,
+            port = 4370,
+            timeoutMs = 500,
+            maxParallel = 32,
+            onEachFound = { foundIp ->
+                found.add(foundIp)
+                activity.runOnUiThread {
+                    scanStatus.text = "Đã tìm thấy ${found.size} thiết bị. Chạm vào IP để chọn."
+                    discoveredDevices.addView(activity.btn("Chọn $foundIp") {
+                        ipField.setText(foundIp)
+                        portField.setText("4370")
+                        activity.log("Đã chọn máy chấm công tại $foundIp:4370.")
+                    })
+                }
+            },
+            onProgress = { done, total ->
+                if (done == total || done % 32 == 0) {
+                    activity.runOnUiThread { scanStatus.text = "Đang quét… $done/$total địa chỉ · tìm thấy ${found.size}" }
+                }
+            },
+            onComplete = { ips ->
+                activity.runOnUiThread {
+                    cancelScan = null
+                    scanButton.text = "Tự quét tìm máy chấm công"
+                    scanStatus.text = if (ips.isEmpty()) {
+                        "Không tìm thấy thiết bị mở cổng 4370. Kiểm tra cùng mạng Wi‑Fi và cài đặt TCP/IP của máy."
+                    } else {
+                        "Tìm thấy ${ips.size} thiết bị. Chạm vào IP cần dùng."
+                    }
+                    activity.log("Quét xong: tìm thấy ${ips.size} thiết bị mở cổng 4370.")
+                }
+            }
+        )
+    }
+    body.addView(scanButton)
 
     val results = column().apply {
         visibility = View.GONE
