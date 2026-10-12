@@ -206,8 +206,8 @@ class MainActivity : Activity() {
 
     private val colorBackground = Color.rgb(246, 249, 246)
     private val colorSurface = Color.WHITE
-    private val colorText = Color.rgb(20, 27, 22)
-    private val colorMuted = Color.rgb(99, 112, 103)
+    internal val colorText = Color.rgb(20, 27, 22)
+    internal val colorMuted = Color.rgb(99, 112, 103)
     private val colorAccent = Color.rgb(31, 123, 74)
     private val colorAccentSoft = Color.rgb(232, 244, 235)
     private val colorBorder = Color.rgb(222, 231, 223)
@@ -768,6 +768,7 @@ class MainActivity : Activity() {
         b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
 
         b.addView(sectionTitle("Tiện ích"))
+        b.addView(menuBtn("12. Chấm công ZKTeco K20", "Đọc và chia sẻ bản ghi chấm công qua Wi‑Fi/LAN") { pageZkAttendance() })
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
