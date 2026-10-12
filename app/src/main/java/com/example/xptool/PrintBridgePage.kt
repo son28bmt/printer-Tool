@@ -44,8 +44,8 @@ object PrintBridgePage {
         val tvSecNotice = TextView(activity).apply {
             text = "🛡️ BẢO MẬT & MẠNG:\nKhi dịch vụ Cầu nối in hoạt động, điện thoại sẽ lắng nghe kết nối TCP tại cổng 9100. Các thiết bị khác trong cùng mạng WiFi (máy tính, phần mềm POS) có thể in ra máy in đang nối với điện thoại qua USB/Bluetooth."
             textSize = 13f
-            setTextColor(0xFF1565C0.toInt())
-            setBackgroundColor(0xFFE3F2FD.toInt())
+            setTextColor(0xFF1F7B4A.toInt())
+            setBackgroundColor(0xFFEAF4ED.toInt())
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
         }
         container.addView(tvSecNotice)
@@ -178,7 +178,7 @@ object PrintBridgePage {
 
         val cardStatus = activity.column().apply {
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-            setBackgroundColor(0xFFF5F5F5.toInt())
+            activity.styleCard(this)
         }
         cardStatus.addView(tvStatus)
         cardStatus.addView(tvJobs)

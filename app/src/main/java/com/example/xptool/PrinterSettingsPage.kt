@@ -200,7 +200,7 @@ object PrinterSettingsPage {
     ) {
         val card = activity.column().apply {
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-            setBackgroundColor(0xFFF5F5F5.toInt())
+            activity.styleCard(this)
         }
         val tvTitle = activity.label(cmd.name, 15f, true)
         val tvNotes = activity.label("Ghi chú: ${cmd.notes}", 12f)

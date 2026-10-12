@@ -128,7 +128,7 @@ object NotificationPrintPage {
         // Danh sách Lịch sử đọc thông báo
         val cardLog = activity.column().apply {
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-            setBackgroundColor(0xFFF5F5F5.toInt())
+            activity.styleCard(this)
         }
         val tvLogTitle = activity.label("Lịch sử nhận thông báo gần đây (30 bản ghi):", 13f, true)
         val tvLogContent = TextView(activity).apply {

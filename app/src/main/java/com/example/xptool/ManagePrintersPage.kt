@@ -39,7 +39,7 @@ object ManagePrintersPage {
             setTextColor(0xFF212121.toInt())
         }
 
-        val btnRefresh = Button(activity).apply {
+        val btnRefresh = activity.styleButton(Button(activity), primary = false).apply {
             text = "🔄 Làm mới"
             textSize = 12f
             isAllCaps = false
@@ -55,7 +55,7 @@ object ManagePrintersPage {
             }
         }
 
-        val btnAddManual = Button(activity).apply {
+        val btnAddManual = activity.styleButton(Button(activity)).apply {
             text = "➕ Thêm theo IP"
             textSize = 12f
             isAllCaps = false
@@ -79,7 +79,7 @@ object ManagePrintersPage {
             textSize = 12f
             setTextColor(0xFF555555.toInt())
             setPadding(dp(8), dp(6), dp(8), dp(8))
-            setBackgroundColor(0xFFF0F4C3.toInt())
+            setBackgroundColor(0xFFEAF4ED.toInt())
         }
         container.addView(tvNote)
         container.addView(View(activity).apply {
@@ -103,10 +103,9 @@ object ManagePrintersPage {
 
         printerList.forEach { p ->
             val isActive = (p.id == activeKey)
-            val card = LinearLayout(activity).apply {
+            val card = activity.styleCard(LinearLayout(activity), selected = isActive).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(12), dp(10), dp(12), dp(10))
-                setBackgroundColor(if (isActive) 0xFFE8F5E9.toInt() else 0xFFF5F5F5.toInt())
             }
 
             // Hàng 1: Tên máy in + Trạng thái
@@ -170,11 +169,15 @@ object ManagePrintersPage {
             card.addView(tvSub)
 
             // Hàng nút thao tác
-            val rowBtns = LinearLayout(activity).apply {
+            val actionRows = activity.column()
+            val primaryActions = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            val secondaryActions = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
 
-            val btnUse = Button(activity).apply {
+            val btnUse = activity.styleButton(Button(activity), primary = !isActive).apply {
                 text = if (isActive) "Đang chọn" else "Dùng máy này"
                 textSize = 11f
                 isAllCaps = false
@@ -188,7 +191,7 @@ object ManagePrintersPage {
                 }
             }
 
-            val btnPaper = Button(activity).apply {
+            val btnPaper = activity.styleButton(Button(activity), primary = false).apply {
                 text = "Khổ ${p.paperWidth}mm"
                 textSize = 11f
                 isAllCaps = false
@@ -202,7 +205,7 @@ object ManagePrintersPage {
                 }
             }
 
-            val btnTest = Button(activity).apply {
+            val btnTest = activity.styleButton(Button(activity), primary = false).apply {
                 text = "In thử"
                 textSize = 11f
                 isAllCaps = false
@@ -213,7 +216,7 @@ object ManagePrintersPage {
                 }
             }
 
-            val btnRename = Button(activity).apply {
+            val btnRename = activity.styleButton(Button(activity), primary = false).apply {
                 text = "Đổi tên"
                 textSize = 11f
                 isAllCaps = false
@@ -237,7 +240,7 @@ object ManagePrintersPage {
                 }
             }
 
-            val btnDelete = Button(activity).apply {
+            val btnDelete = activity.styleButton(Button(activity), primary = false, danger = true).apply {
                 text = "Xóa"
                 textSize = 11f
                 isAllCaps = false
@@ -256,13 +259,20 @@ object ManagePrintersPage {
                 }
             }
 
-            rowBtns.addView(btnUse)
-            rowBtns.addView(btnPaper)
-            rowBtns.addView(btnTest)
-            rowBtns.addView(btnRename)
-            rowBtns.addView(btnDelete)
+            fun addAction(row: LinearLayout, button: Button) {
+                row.addView(button, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                    marginEnd = dp(6)
+                })
+            }
+            addAction(primaryActions, btnUse)
+            addAction(primaryActions, btnTest)
+            addAction(primaryActions, btnPaper)
+            addAction(secondaryActions, btnRename)
+            addAction(secondaryActions, btnDelete)
+            actionRows.addView(primaryActions)
+            actionRows.addView(secondaryActions)
 
-            card.addView(rowBtns)
+            card.addView(actionRows)
             container.addView(card)
 
             container.addView(View(activity).apply {

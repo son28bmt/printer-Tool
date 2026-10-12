@@ -1,4 +1,4 @@
-﻿package com.example.xptool
+package com.example.xptool
 
 import android.Manifest
 import android.app.Activity
@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.graphics.Typeface
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -59,35 +60,35 @@ class MainActivity : Activity() {
 
     // ----------------------------------------------------- trạng thái chung
 
-    private var connectType = POSConnect.DEVICE_TYPE_ETHERNET // 1: ETHERNET, 2: BLUETOOTH, 3: USB
-    private var printerIp = "192.168.4.2"
-    private var printerPort = 9100
-    private var btMac = ""
-    private var usbPath = ""
-    private var paperWidth = 58
+    internal var connectType = POSConnect.DEVICE_TYPE_ETHERNET // 1: ETHERNET, 2: BLUETOOTH, 3: USB
+    internal var printerIp = "192.168.4.2"
+    internal var printerPort = 9100
+    internal var btMac = ""
+    internal var usbPath = ""
+    internal var paperWidth = 58
 
-    private var etIpCur: EditText? = null
-    private var etPortCur: EditText? = null
+    internal var etIpCur: EditText? = null
+    internal var etPortCur: EditText? = null
     private var currentPageIsHome = true
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
-    private val mainHandler = Handler(Looper.getMainLooper())
+    internal val mainHandler = Handler(Looper.getMainLooper())
 
     private val logBuffer = StringBuilder()
     private var logView: TextView? = null
     private var logScroll: ScrollView? = null
 
-    private val udp = PosUdpNet()
-    private val found = Collections.synchronizedList(mutableListOf<UdpDevice>())
+    internal val udp = PosUdpNet()
+    internal val found = Collections.synchronizedList(mutableListOf<UdpDevice>())
     private var multicastLock: WifiManager.MulticastLock? = null
 
-    private val udpCallback = UdpCallback { d -> onFound(d) }
-    private var connListener: IConnectListener? = null
-    private var onFoundUi: ((UdpDevice) -> Unit)? = null
+    internal val udpCallback = UdpCallback { d -> onFound(d) }
+    internal var connListener: IConnectListener? = null
+    internal var onFoundUi: ((UdpDevice) -> Unit)? = null
 
-    private val IPTYPE = InputType.TYPE_CLASS_PHONE
+    internal val IPTYPE = InputType.TYPE_CLASS_PHONE
 
-    private val encTypes = listOf(
+    internal val encTypes = listOf(
         "WPA2_AES_PSK" to POSConst.ENCRYPT_WPA2_AES_PSK,
         "WPA2_TKIP_AES_PSK" to POSConst.ENCRYPT_WPA2_TKIP_AES_PSK,
         "WPA2_TKIP" to POSConst.ENCRYPT_WPA2_TKIP,
@@ -203,11 +204,13 @@ class MainActivity : Activity() {
 
     fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private val colorBackground = Color.rgb(246, 248, 251)
+    private val colorBackground = Color.rgb(246, 249, 246)
     private val colorSurface = Color.WHITE
-    private val colorText = Color.rgb(31, 41, 55)
-    private val colorMuted = Color.rgb(100, 116, 139)
-    private val colorAccent = Color.rgb(37, 99, 235)
+    private val colorText = Color.rgb(20, 27, 22)
+    private val colorMuted = Color.rgb(99, 112, 103)
+    private val colorAccent = Color.rgb(31, 123, 74)
+    private val colorAccentSoft = Color.rgb(232, 244, 235)
+    private val colorBorder = Color.rgb(222, 231, 223)
 
     private fun roundedBackground(color: Int, radius: Int = 14, strokeColor: Int? = null) =
         GradientDrawable().apply {
@@ -216,7 +219,20 @@ class MainActivity : Activity() {
             strokeColor?.let { setStroke(dp(1), it) }
         }
 
-    fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    private fun rippleForeground(radius: Int = 12) = RippleDrawable(
+        ColorStateList.valueOf(Color.argb(28, 31, 123, 74)),
+        null,
+        roundedBackground(Color.WHITE, radius)
+    )
+
+    fun column() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        dividerDrawable = GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            setSize(1, dp(6))
+        }
+        showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+    }
 
     fun label(t: String, size: Float = 14f, bold: Boolean = false) = TextView(this).apply {
         text = t
@@ -224,6 +240,16 @@ class MainActivity : Activity() {
         setTextColor(colorText)
         if (bold) typeface = Typeface.DEFAULT_BOLD
         setPadding(0, dp(6), 0, dp(6))
+        setLineSpacing(dp(1).toFloat(), 1f)
+    }
+
+    fun sectionTitle(text: String) = TextView(this).apply {
+        this.text = text.uppercase(Locale.getDefault())
+        textSize = 11f
+        letterSpacing = 0.1f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(colorAccent)
+        setPadding(0, dp(10), 0, dp(4))
     }
 
     fun edit(hint: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT) =
@@ -231,13 +257,50 @@ class MainActivity : Activity() {
             this.hint = hint
             setText(value)
             inputType = type
+            textSize = 15f
+            setTextColor(colorText)
+            setHintTextColor(colorMuted)
+            background = roundedBackground(colorSurface, 12, colorBorder)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            minHeight = dp(48)
         }
 
-    fun btn(text: String, onClick: () -> Unit) = Button(this).apply {
-        this.text = text
+    fun styleButton(button: Button, primary: Boolean = true, danger: Boolean = false): Button = button.apply {
         isAllCaps = false
-        backgroundTintList = ColorStateList.valueOf(colorAccent)
-        setTextColor(Color.WHITE)
+        textSize = 13f
+        minHeight = dp(42)
+        setPadding(dp(12), dp(4), dp(12), dp(4))
+        backgroundTintList = null
+        val fill = when {
+            danger -> Color.rgb(255, 242, 240)
+            primary -> colorAccent
+            else -> colorSurface
+        }
+        val stroke = when {
+            danger -> Color.rgb(232, 192, 187)
+            primary -> null
+            else -> colorBorder
+        }
+        background = roundedBackground(fill, 12, stroke)
+        foreground = rippleForeground()
+        setTextColor(when {
+            danger -> Color.rgb(166, 48, 39)
+            primary -> Color.WHITE
+            else -> colorText
+        })
+    }
+
+    fun <T : View> styleCard(view: T, selected: Boolean = false): T = view.apply {
+        background = roundedBackground(
+            if (selected) colorAccentSoft else colorSurface,
+            16,
+            if (selected) Color.rgb(177, 211, 185) else colorBorder
+        )
+        elevation = dp(1).toFloat()
+    }
+
+    fun btn(text: String, onClick: () -> Unit) = styleButton(Button(this)).apply {
+        this.text = text
         setOnClickListener { onClick() }
     }
 
@@ -245,7 +308,9 @@ class MainActivity : Activity() {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(16), dp(12), dp(16), dp(12))
-        background = roundedBackground(colorSurface, strokeColor = Color.rgb(229, 234, 241))
+        background = roundedBackground(colorSurface, strokeColor = colorBorder)
+        elevation = dp(1).toFloat()
+        foreground = rippleForeground(14)
         isClickable = true
         isFocusable = true
         setOnClickListener { onClick() }
@@ -265,8 +330,9 @@ class MainActivity : Activity() {
         })
         addView(textColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         addView(TextView(this@MainActivity).apply {
-            text = "›"
-            textSize = 26f
+            text = "→"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorAccent)
         })
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -277,70 +343,127 @@ class MainActivity : Activity() {
     fun row(vararg items: Pair<View, Float>) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         for ((v, w) in items) {
-            addView(v, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, w))
+            addView(v, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, w).apply {
+                marginEnd = dp(6)
+            })
         }
     }
 
     fun radio(text: String) = RadioButton(this).apply {
         this.text = text
         id = View.generateViewId()
+        buttonTintList = ColorStateList.valueOf(colorAccent)
+        setTextColor(colorText)
     }
 
-    private fun showPage(title: String, isHome: Boolean, build: (LinearLayout) -> Unit) {
+    internal fun showPage(title: String, isHome: Boolean, build: (LinearLayout) -> Unit) {
         syncPrinterFields()
         onFoundUi = null
         currentPageIsHome = isHome
         if (!isHome) {
             mainHandler.removeCallbacks(autoRefreshRunnable)
         }
+        window.statusBarColor = colorBackground
+        window.navigationBarColor = colorBackground
+        var systemUiFlags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            systemUiFlags = systemUiFlags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        window.decorView.systemUiVisibility = systemUiFlags
 
         val root = column().apply {
-            setPadding(dp(16), dp(10), dp(16), dp(12))
+            setPadding(dp(20), dp(12), dp(20), dp(14))
             setBackgroundColor(colorBackground)
         }
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(8))
         }
-        if (!isHome) header.addView(btn("←") { showHome() })
-        header.addView(label(title, 20f, true).apply {
-            setTextColor(colorText)
-            setPadding(dp(4), dp(8), 0, dp(10))
-        })
+        if (isHome) {
+            val brandMark = TextView(this).apply {
+                text = "XP"
+                textSize = 15f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = roundedBackground(colorText, 12)
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(12) }
+            }
+            header.addView(brandMark)
+            val brandText = column()
+            brandText.addView(TextView(this).apply {
+                text = "XP TOOL"
+                textSize = 16f
+                letterSpacing = 0.08f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(colorText)
+            })
+            brandText.addView(TextView(this).apply {
+                text = "PRINT MANAGEMENT"
+                textSize = 10f
+                letterSpacing = 0.12f
+                setTextColor(colorMuted)
+            })
+            header.addView(brandText)
+        } else {
+            header.addView(styleButton(Button(this), primary = false).apply {
+                text = "‹"
+                textSize = 28f
+                setTextColor(colorAccent)
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(10) }
+                setOnClickListener { showHome() }
+            })
+            header.addView(label(title, 18f, true))
+        }
         root.addView(header)
 
         val body = column()
         body.setPadding(0, dp(4), 0, dp(10))
         build(body)
         root.addView(
-            ScrollView(this).apply { addView(body) },
+            ScrollView(this).apply {
+                isFillViewport = true
+                addView(body)
+            },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         )
         root.addView(
             logBox(),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(122))
         )
         setContentView(root)
     }
 
-    private fun logBox(): ScrollView {
+    private fun logBox(): LinearLayout {
         val tv = TextView(this).apply {
             typeface = Typeface.MONOSPACE
             textSize = 11f
             text = logBuffer.toString()
             setTextIsSelectable(true)
             setTextColor(colorMuted)
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(10), dp(6), dp(10), dp(6))
         }
         val sv = ScrollView(this).apply {
-            background = roundedBackground(colorSurface, strokeColor = Color.rgb(229, 234, 241))
             addView(tv)
         }
+        val box = column().apply {
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = roundedBackground(colorSurface, 14, colorBorder)
+        }
+        box.addView(TextView(this).apply {
+            text = "NHẬT KÝ HOẠT ĐỘNG"
+            textSize = 10f
+            letterSpacing = 0.08f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorAccent)
+        })
+        box.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         logView = tv
         logScroll = sv
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
-        return sv
+        return box
     }
 
     fun log(msg: String) {
@@ -368,7 +491,7 @@ class MainActivity : Activity() {
         etPortCur = null
     }
 
-    private fun savePrinter() {
+    internal fun savePrinter() {
         getSharedPreferences("xp", MODE_PRIVATE).edit()
             .putString("ip", printerIp)
             .putInt("port", printerPort)
@@ -378,12 +501,12 @@ class MainActivity : Activity() {
             .apply()
     }
 
-    private fun targetIp() = etIpCur?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: printerIp
-    private fun targetPort() = etPortCur?.text?.toString()?.trim()?.toIntOrNull() ?: printerPort
+    internal fun targetIp() = etIpCur?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: printerIp
+    internal fun targetPort() = etPortCur?.text?.toString()?.trim()?.toIntOrNull() ?: printerPort
 
     // ------------------------------------------------------------- TRANG CHỦ
 
-    private fun connTypeName() = when (connectType) {
+    internal fun connTypeName() = when (connectType) {
         POSConnect.DEVICE_TYPE_BLUETOOTH -> "Bluetooth ($btMac)"
         POSConnect.DEVICE_TYPE_USB -> "USB ($usbPath)"
         else -> "LAN/WiFi ($printerIp:$printerPort)"
@@ -442,36 +565,49 @@ class MainActivity : Activity() {
         val headerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
         }
-        val title = TextView(this).apply {
-            text = "Máy in của tôi (${PrinterManager.savedPrinters.size})"
-            textSize = 16f
+        val titleColumn = column()
+        titleColumn.addView(TextView(this).apply {
+            text = "MÁY IN CỦA TÔI"
+            textSize = 11f
+            letterSpacing = 0.1f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(4), 0, dp(4))
-        }
-        val btnRefresh = Button(this).apply {
-            text = "🔄 Làm mới trạng thái"
+            setTextColor(colorAccent)
+        })
+        titleColumn.addView(TextView(this).apply {
+            text = "${PrinterManager.savedPrinters.size} thiết bị đã lưu"
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorText)
+        })
+        val btnRefresh = styleButton(Button(this), primary = false).apply {
+            text = "Làm mới"
             textSize = 12f
-            isAllCaps = false
             setOnClickListener {
                 triggerAutoRefreshStatus()
             }
         }
-        headerRow.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        headerRow.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         headerRow.addView(btnRefresh, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         b.addView(headerRow)
 
         if (PrinterManager.savedPrinters.isEmpty()) {
-            b.addView(label("Chưa có máy in nào trong danh sách. Hãy vào 'Tìm máy in LAN' để dò và lưu máy in."))
+            val emptyCard = column().apply {
+                setPadding(dp(18), dp(16), dp(18), dp(16))
+                background = roundedBackground(colorSurface, 16, colorBorder)
+            }
+            emptyCard.addView(label("Chưa có máy in nào", 17f, true))
+            emptyCard.addView(label("Tìm máy in trong mạng rồi lưu thiết bị để bắt đầu.", 13f).apply {
+                setTextColor(colorMuted)
+            })
+            emptyCard.addView(btn("Tìm máy in") { pageNetwork() })
+            b.addView(emptyCard)
         } else {
             val listCol = column()
             PrinterManager.savedPrinters.forEach { p ->
-                val card = column().apply {
+                val card = styleCard(column(), selected = p.id == PrinterManager.activePrinterId).apply {
                     setPadding(dp(12), dp(10), dp(12), dp(10))
-                    background = roundedBackground(
-                        if (p.id == PrinterManager.activePrinterId) Color.rgb(235, 243, 255) else colorSurface,
-                        strokeColor = if (p.id == PrinterManager.activePrinterId) Color.rgb(191, 214, 255) else Color.rgb(229, 234, 241)
-                    )
                 }
                 val dotStr = when (p.status) {
                     PrinterStatus.ONLINE -> "● Online"
@@ -489,7 +625,7 @@ class MainActivity : Activity() {
                     text = "${p.name} ${if (p.id == PrinterManager.activePrinterId) "[ĐANG DÙNG]" else ""}"
                     textSize = 15f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(if (p.id == PrinterManager.activePrinterId) 0xFF1B5E20.toInt() else 0xFF212121.toInt())
+                    setTextColor(if (p.id == PrinterManager.activePrinterId) colorAccent else colorText)
                 }
                 val tvStatus = TextView(this).apply {
                     text = dotStr
@@ -510,14 +646,15 @@ class MainActivity : Activity() {
                 val tvSub = TextView(this).apply {
                     text = subText
                     textSize = 12f
-                    setTextColor(0xFF616161.toInt())
+                    setTextColor(colorMuted)
                 }
 
-                val rowBtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                val btnUse = Button(this).apply {
+                val actionRows = column()
+                val primaryActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val secondaryActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val btnUse = styleButton(Button(this)).apply {
                     text = "Dùng máy này"
                     textSize = 12f
-                    isAllCaps = false
                     setOnClickListener {
                         PrinterManager.setActivePrinter(this@MainActivity, p.id)
                         printerIp = p.ip
@@ -531,19 +668,17 @@ class MainActivity : Activity() {
                         showHome()
                     }
                 }
-                val btnTest = Button(this).apply {
+                val btnTest = styleButton(Button(this), primary = false).apply {
                     text = "In thử"
                     textSize = 12f
-                    isAllCaps = false
                     setOnClickListener {
                         PrinterManager.setActivePrinter(this@MainActivity, p.id)
                         sendPrintData("In thử ${p.name}", getReceiptDemoBytes())
                     }
                 }
-                val btnPaper = Button(this).apply {
+                val btnPaper = styleButton(Button(this), primary = false).apply {
                     text = "Khổ ${p.paperWidth}mm"
                     textSize = 12f
-                    isAllCaps = false
                     setOnClickListener {
                         p.paperWidth = if (p.paperWidth == 58) 80 else 58
                         if (p.id == PrinterManager.activePrinterId) {
@@ -555,10 +690,9 @@ class MainActivity : Activity() {
                         showHome()
                     }
                 }
-                val btnRename = Button(this).apply {
+                val btnRename = styleButton(Button(this), primary = false).apply {
                     text = "Đổi tên"
                     textSize = 12f
-                    isAllCaps = false
                     setOnClickListener {
                         val etName = EditText(this@MainActivity).apply { setText(p.name) }
                         AlertDialog.Builder(this@MainActivity)
@@ -576,10 +710,9 @@ class MainActivity : Activity() {
                             .show()
                     }
                 }
-                val btnDel = Button(this).apply {
+                val btnDel = styleButton(Button(this), primary = false, danger = true).apply {
                     text = "Xóa"
                     textSize = 12f
-                    isAllCaps = false
                     setOnClickListener {
                         AlertDialog.Builder(this@MainActivity)
                             .setTitle("Xóa máy in")
@@ -593,15 +726,22 @@ class MainActivity : Activity() {
                     }
                 }
 
-                rowBtns.addView(btnUse)
-                rowBtns.addView(btnPaper)
-                rowBtns.addView(btnTest)
-                rowBtns.addView(btnRename)
-                rowBtns.addView(btnDel)
+                fun addAction(row: LinearLayout, button: Button) {
+                    row.addView(button, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        marginEnd = dp(6)
+                    })
+                }
+                addAction(primaryActions, btnUse)
+                addAction(primaryActions, btnTest)
+                addAction(primaryActions, btnPaper)
+                addAction(secondaryActions, btnRename)
+                addAction(secondaryActions, btnDel)
+                actionRows.addView(primaryActions)
+                actionRows.addView(secondaryActions)
 
                 card.addView(row1)
                 card.addView(tvSub)
-                card.addView(rowBtns)
+                card.addView(actionRows)
                 listCol.addView(card)
 
                 listCol.addView(View(this).apply {
@@ -611,23 +751,23 @@ class MainActivity : Activity() {
             b.addView(listCol)
         }
 
-        b.addView(label("Kết nối máy in", 15f, true))
+        b.addView(sectionTitle("Kết nối máy in"))
         b.addView(menuBtn("🔍 Chẩn đoán kết nối 1 chạm", "Tự động kiểm tra WiFi, Router, IP máy in, nắp máy & nạp giấy") { pageDiagnostics() })
         b.addView(menuBtn("0. Quản lý Máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy") { pageManagePrinters() })
         b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
         b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
 
-        b.addView(label("Thiết lập và in", 15f, true))
+        b.addView(sectionTitle("Thiết lập và in"))
         b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
         b.addView(menuBtn("4. In mẫu Hóa đơn & Mã vạch QR", "In Receipt Demo, mã vạch 1D, QR Code thanh toán") { pagePrintReceipt() })
         b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
         b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
 
-        b.addView(label("Chia sẻ và tự động hóa", 15f, true))
+        b.addView(sectionTitle("Chia sẻ và tự động hóa"))
         b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
         b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
 
-        b.addView(label("Tiện ích", 15f, true))
+        b.addView(sectionTitle("Tiện ích"))
         b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
         b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
         b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
@@ -666,253 +806,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun pageDiagnostics() = showPage("Chẩn đoán kết nối 1 chạm", false) { b ->
-        val active = PrinterManager.getActivePrinter()
-        val targetName = active?.name ?: "Chưa chọn máy in"
-        val targetInfo = active?.let { "${it.ip}:${it.port}" } ?: ""
-
-        b.addView(label("Đang chẩn đoán máy in: $targetName ($targetInfo)", 14f, true))
-        b.addView(label("Hệ thống sẽ lần lượt kiểm tra 6 bước theo thứ tự ưu tiên:", 12f))
-
-        val stepsCol = column()
-        val stepViews = mutableMapOf<Int, TextView>()
-
-        for (i in 1..6) {
-            val tvStep = TextView(this).apply {
-                text = "⏳ Bước $i: Chờ kiểm tra..."
-                textSize = 13f
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                setBackgroundColor(0xFFEEEEEE.toInt())
-            }
-            stepViews[i] = tvStep
-            stepsCol.addView(tvStep)
-            stepsCol.addView(View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4))
-            })
-        }
-        b.addView(stepsCol)
-
-        val resultCard = column().apply {
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            visibility = View.GONE
-        }
-        val tvConclusionTitle = label("KẾT LUẬN CHẨN ĐOÁN:", 15f, true)
-        val tvConclusion = label("", 14f)
-        val btnAction = Button(this).apply {
-            visibility = View.GONE
-            isAllCaps = false
-        }
-
-        resultCard.addView(tvConclusionTitle)
-        resultCard.addView(tvConclusion)
-        resultCard.addView(btnAction)
-        b.addView(resultCard)
-
-        val btnStart = btn("🚀 Bắt đầu Chẩn đoán 1 chạm") {
-            resultCard.visibility = View.GONE
-            for (i in 1..6) {
-                stepViews[i]?.text = "⏳ Bước $i: Đang kiểm tra..."
-                stepViews[i]?.setBackgroundColor(0xFFFFF9C4.toInt())
-            }
-
-            DiagnosticHelper.runDiagnostics(
-                context = this@MainActivity,
-                udp = udp,
-                targetPrinter = active,
-                onStepUpdate = { step ->
-                    runOnUiThread {
-                        val tv = stepViews[step.stepIndex]
-                        if (tv != null) {
-                            if (step.isOk) {
-                                tv.text = "✔ ${step.title}\n   ${step.message}"
-                                tv.setBackgroundColor(0xFFE8F5E9.toInt())
-                                tv.setTextColor(0xFF1B5E20.toInt())
-                            } else {
-                                tv.text = "✘ ${step.title}\n   ${step.message}"
-                                tv.setBackgroundColor(0xFFFFEBEE.toInt())
-                                tv.setTextColor(0xFFB71C1C.toInt())
-                            }
-                        }
-                    }
-                },
-                onFinished = { failure ->
-                    runOnUiThread {
-                        resultCard.visibility = View.VISIBLE
-                        if (failure == null) {
-                            resultCard.setBackgroundColor(0xFFE8F5E9.toInt())
-                            tvConclusion.text = "🎉 Mọi thứ đều ổn! Máy in và mạng WiFi kết nối hoàn hảo."
-                            btnAction.visibility = View.VISIBLE
-                            btnAction.text = "In thử ngay"
-                            btnAction.setOnClickListener {
-                                sendPrintData("In thử sau chẩn đoán", getReceiptDemoBytes())
-                            }
-                        } else {
-                            resultCard.setBackgroundColor(0xFFFFEBEE.toInt())
-                            tvConclusion.text = "⚠ Phát hiện sự cố tại ${failure.title}:\n\n${failure.message}"
-
-                            if (failure.actionType == DiagnosticActionType.OPEN_WIFI_SETTINGS) {
-                                btnAction.visibility = View.VISIBLE
-                                btnAction.text = "Mở Cài đặt WiFi"
-                                btnAction.setOnClickListener {
-                                    try {
-                                        startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-                                    } catch (_: Exception) {
-                                    }
-                                }
-                            } else if (failure.actionType == DiagnosticActionType.CHANGE_PRINTER_IP) {
-                                btnAction.visibility = View.VISIBLE
-                                btnAction.text = "Đổi IP máy in về cùng dải WiFi"
-                                btnAction.setOnClickListener {
-                                    pageNetwork()
-                                }
-                            } else {
-                                btnAction.visibility = View.GONE
-                            }
-                        }
-                    }
-                }
-            )
-        }
-        b.addView(btnStart)
-    }
-
-    private fun pageAbout() = showPage("Thông tin & Bảo mật", false) { b ->
-        b.addView(label("XP Tool by QuangSonAIBAT", 18f, true))
-        b.addView(label("Phiên bản: 0.2.0 (Play Store Ready)"))
-        b.addView(label("Tác giả / Nhà phát triển: QuangSonAIBAT"))
-        b.addView(label("Email hỗ trợ: quangsonnguyen2807@gmail.com"))
-        b.addView(label("GitHub Repo: https://github.com/son28bmt/printer-Tool"))
-        b.addView(label("Chính sách bảo mật (Privacy Policy):", 15f, true))
-        b.addView(label(
-            "Ứng dụng KHÔNG thu thập, lưu trữ hay chia sẻ thông tin cá nhân của người dùng. " +
-            "Mọi quyền truy cập WiFi, Bluetooth, USB, Vị trí strictly được sử dụng để kết nối và điều khiển máy in cục bộ."
-        ))
-        b.addView(btn("Xem Chính sách bảo mật (Privacy Policy)") {
-            try {
-                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://raw.githubusercontent.com/son28bmt/printer-Tool/main/PRIVACY_POLICY.md"))
-                startActivity(intent)
-            } catch (e: Exception) {
-                log("Lỗi mở trình duyệt: ${e.message}")
-            }
-        })
-    }
-
     // ---------------------------------------- TRANG KẾT NỐI: LAN / BT / USB
-
-    private fun pageSelectConnection() = showPage("Chọn kết nối máy in", false) { b ->
-        val rg = RadioGroup(this)
-        val rbLan = radio("Mạng LAN / WiFi (Ethernet)")
-        val rbBt = radio("Bluetooth (Classic)")
-        val rbUsb = radio("Cổng USB OTG")
-        rg.addView(rbLan)
-        rg.addView(rbBt)
-        rg.addView(rbUsb)
-        b.addView(rg)
-
-        val lanPanel = column().apply { visibility = View.GONE }
-        lanPanel.addView(label("Nhập IP và Cổng TCP máy in (Mặc định: 9100):"))
-        lanPanel.addView(printerBar())
-
-        val btPanel = column().apply { visibility = View.GONE }
-        val btAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf())
-        val spBt = Spinner(this).apply { adapter = btAdapter }
-        val btDevices = mutableListOf<BluetoothDevice>()
-
-        fun refreshBt() {
-            btAdapter.clear()
-            btDevices.clear()
-            checkBtPermission()
-            val bta = BluetoothAdapter.getDefaultAdapter()
-            if (bta == null || !bta.isEnabled) {
-                log("Bluetooth chưa được bật trên điện thoại.")
-                return
-            }
-            val bonded = try { bta.bondedDevices } catch (e: Exception) { null }
-            if (bonded.isNullOrEmpty()) {
-                log("Không thấy thiết bị Bluetooth nào đã ghép đôi. Hãy ghép đôi trong Cài đặt Bluetooth.")
-            } else {
-                bonded.forEach { dev ->
-                    btDevices.add(dev)
-                    btAdapter.add("${dev.name ?: "Unknown"} [${dev.address}]")
-                }
-                log("Đã tìm thấy ${btDevices.size} thiết bị Bluetooth đã ghép đôi.")
-            }
-        }
-        btPanel.addView(label("Chọn máy in Bluetooth đã ghép đôi:"))
-        btPanel.addView(spBt)
-        btPanel.addView(btn("Làm mới danh sách Bluetooth") { refreshBt() })
-
-        val usbPanel = column().apply { visibility = View.GONE }
-        val usbAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf())
-        val spUsb = Spinner(this).apply { adapter = usbAdapter }
-        val usbNames = mutableListOf<String>()
-
-        fun refreshUsb() {
-            usbAdapter.clear()
-            usbNames.clear()
-            val names: List<String>? = POSConnect.getUsbDevices(applicationContext)
-            if (names.isNullOrEmpty()) {
-                log("Không tìm thấy thiết bị máy in USB cắm qua cáp OTG.")
-            } else {
-                for (name in names) {
-                    usbNames.add(name)
-                    usbAdapter.add(name)
-                }
-                log("Tìm thấy ${usbNames.size} thiết bị USB.")
-            }
-        }
-        usbPanel.addView(label("Chọn thiết bị USB kết nối:"))
-        usbPanel.addView(spUsb)
-        usbPanel.addView(btn("Làm mới danh sách USB") { refreshUsb() })
-
-        b.addView(lanPanel)
-        b.addView(btPanel)
-        b.addView(usbPanel)
-
-        rg.setOnCheckedChangeListener { _, id ->
-            lanPanel.visibility = if (id == rbLan.id) View.VISIBLE else View.GONE
-            btPanel.visibility = if (id == rbBt.id) View.VISIBLE else View.GONE
-            usbPanel.visibility = if (id == rbUsb.id) View.VISIBLE else View.GONE
-            if (id == rbBt.id) refreshBt()
-            if (id == rbUsb.id) refreshUsb()
-        }
-
-        when (connectType) {
-            POSConnect.DEVICE_TYPE_BLUETOOTH -> rg.check(rbBt.id)
-            POSConnect.DEVICE_TYPE_USB -> rg.check(rbUsb.id)
-            else -> rg.check(rbLan.id)
-        }
-
-        b.addView(btn("Lưu & Áp dụng phương thức kết nối") {
-            when (rg.checkedRadioButtonId) {
-                rbLan.id -> {
-                    connectType = POSConnect.DEVICE_TYPE_ETHERNET
-                    savePrinter()
-                    log("Đã chọn kết nối LAN/WiFi: $printerIp:$printerPort")
-                }
-                rbBt.id -> {
-                    val dev = btDevices.getOrNull(spBt.selectedItemPosition)
-                        ?: return@btn log("Chưa chọn thiết bị Bluetooth")
-                    connectType = POSConnect.DEVICE_TYPE_BLUETOOTH
-                    btMac = dev.address
-                    savePrinter()
-                    log("Đã chọn máy in Bluetooth: ${dev.name} [$btMac]")
-                }
-                rbUsb.id -> {
-                    val path = usbNames.getOrNull(spUsb.selectedItemPosition)
-                        ?: return@btn log("Chưa chọn thiết bị USB")
-                    connectType = POSConnect.DEVICE_TYPE_USB
-                    usbPath = path
-                    savePrinter()
-                    log("Đã chọn máy in USB: $usbPath")
-                }
-            }
-        })
-    }
 
     // ------------------------------------------- TRANG 1: TÌM MÁY IN & ĐỔI IP
 
-    private fun safeIpStr(d: UdpDevice?): String {
+    internal fun safeIpStr(d: UdpDevice?): String {
         if (d == null) return ""
         return try {
             val ip = d.ipAddress
@@ -923,7 +821,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun safeMacStr(d: UdpDevice?): String {
+    internal fun safeMacStr(d: UdpDevice?): String {
         if (d == null) return ""
         return try {
             val mac = d.macStr ?: ""
@@ -933,7 +831,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createDummyUdpDevice(ip: String, ipB: ByteArray): UdpDevice {
+    internal fun createDummyUdpDevice(ip: String, ipB: ByteArray): UdpDevice {
         val buf = ByteArray(64)
         if (ipB.size == 4) {
             buf[0] = ipB[0]
@@ -954,7 +852,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun foundLabel(d: UdpDevice): String {
+    internal fun foundLabel(d: UdpDevice): String {
         return try {
             val ip = safeIpStr(d)
             val mac = safeMacStr(d)
@@ -969,401 +867,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun pageNetwork(): Unit { showPage("Tìm máy in LAN & Đổi IP", false) { b ->
-        val pn0 = phoneNet()
-        b.addView(
-            label(
-                if (pn0 != null) "Điện thoại: ${ipStr(pn0.ip)}, gateway ${ipStr(pn0.gw)}"
-                else "Không đọc được WiFi điện thoại, hãy bật WiFi."
-            )
-        )
-
-        val foundAdapter = ArrayAdapter<String>(
-            this, android.R.layout.simple_spinner_dropdown_item, mutableListOf<String>()
-        )
-        val spFound = Spinner(this)
-        spFound.adapter = foundAdapter
-        val tvWarn = label("")
-        val panel = column()
-        val result = column().apply { visibility = View.GONE }
-
-        fun refreshWarn() {
-            try {
-                val d = found.getOrNull(spFound.selectedItemPosition) ?: return
-                val pn = phoneNet()
-                val dIp = safeIpStr(d)
-                val dIpBytes = d.ipAddress
-                tvWarn.text =
-                    if (pn != null && dIpBytes != null && dIpBytes.size >= 4 && !sameSubnet(dIpBytes, pn.ip, pn.mask))
-                        "⚠ Máy in ($dIp) khác dải điện thoại (${ipStr(pn.ip)}). Nên đổi IP máy in về cùng dải."
-                    else "Máy in cùng dải với điện thoại."
-            } catch (_: Exception) {
-                tvWarn.text = ""
-            }
-        }
-
-        spFound.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = refreshWarn()
-            override fun onNothingSelected(p: AdapterView<*>?) {}
-        }
-
-        b.addView(btn("Tìm máy in trong mạng (UDP Broadcast - Xprinter)") {
-            found.clear()
-            foundAdapter.clear()
-            result.visibility = View.GONE
-            log("Gửi broadcast UDP tìm máy in (cổng 9000)...")
-            thread {
-                try {
-                    udp.searchNetDevice(udpCallback)
-                } catch (e: Exception) {
-                    log("Tìm lỗi: ${e.javaClass.simpleName}: ${e.message}")
-                }
-            }
-            mainHandler.postDelayed({
-                if (found.isEmpty()) {
-                    log(
-                        "Không thấy máy in Xprinter UDP. Bạn có thể dùng nút 'Quét dải IP LAN' bên dưới để quét Zywell/Epson."
-                    )
-                }
-            }, 4000)
-        })
-
-        b.addView(btn("Quét dải IP mạng LAN cổng 9100 (Zywell, Epson, Xprinter...)") {
-            scanLanPort9100 { ips ->
-                try {
-                    if (ips.isNotEmpty()) {
-                        for (ip in ips) {
-                            if (found.none { safeIpStr(it) == ip }) {
-                                val ipB = ip4(ip) ?: byteArrayOf(0, 0, 0, 0)
-                                val dev = createDummyUdpDevice(ip, ipB)
-                                found.add(dev)
-                                foundAdapter.add("$ip  [LAN Port 9100]")
-                            }
-                        }
-                        result.visibility = View.VISIBLE
-                        refreshWarn()
-                        log("Đã quét thấy ${ips.size} máy in mở cổng 9100: ${ips.joinToString(", ")}. Chọn máy in trong danh sách bên dưới.")
-                    } else {
-                        log("Không tìm thấy địa chỉ IP nào mở cổng 9100 trong dải WiFi hiện tại.")
-                    }
-                } catch (e: Exception) {
-                    log("Lỗi xử lý kết quả quét LAN: ${e.javaClass.simpleName}: ${e.message}")
-                }
-            }
-        })
-        b.addView(btn("➕ Thêm máy in theo IP (không cần quét - Đa dải mạng)") {
-            ManagePrintersPage.showAddManualPrinterDialog(this@MainActivity) {
-                pageNetwork()
-            }
-        })
-
-        // Bảng quét dải IP tùy chỉnh (cho mạng nhiều dải IP có định tuyến)
-        val customScanPanel = column().apply {
-            visibility = View.GONE
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            setBackgroundColor(0xFFEDE7F6.toInt())
-        }
-        val prefixSuggested = pn0?.let { "${it.ip[0].toInt() and 0xFF}.${it.ip[1].toInt() and 0xFF}.${it.ip[2].toInt() and 0xFF}." } ?: "192.168.1."
-        val etBaseOctets = edit("3 Octet đầu (vd: 192.168.1.)", prefixSuggested, IPTYPE)
-        val etStartHost = edit("Tá»« Host (1-254)", "1", InputType.TYPE_CLASS_NUMBER)
-        val etEndHost = edit("Đến Host (1-254)", "254", InputType.TYPE_CLASS_NUMBER)
-        val etPort = edit("Cá»•ng in TCP", "9100", InputType.TYPE_CLASS_NUMBER)
-        val tvCustomProgress = label("Nhập dải mạng IP cần quét rồi bấm 'Bắt đầu quét'. Quá trình có thể dừng bất cứ lúc nào.")
-
-        var cancelCustomScan: (() -> Unit)? = null
-        var isCustomScanning = false
-        val btnRunCustomScan = btn("▶ Bắt đầu quét dải IP") {}
-        btnRunCustomScan.setOnClickListener {
-            if (isCustomScanning) {
-                cancelCustomScan?.invoke()
-                isCustomScanning = false
-                btnRunCustomScan.text = "▶ Bắt đầu quét dải IP"
-                tvCustomProgress.text = "Đã dừng quét giữa chừng."
-                log("Đã dừng tiến trình quét dải IP tùy chỉnh.")
-            } else {
-                val prefix = etBaseOctets.text.toString().trim()
-                val sHost = etStartHost.text.toString().trim().toIntOrNull() ?: 1
-                val eHost = etEndHost.text.toString().trim().toIntOrNull() ?: 254
-                val targetPortNum = etPort.text.toString().trim().toIntOrNull() ?: 9100
-
-                if (prefix.isEmpty()) {
-                    log("Vui lòng nhập 3 octet đầu của dải IP (vd: 192.168.1.)")
-                    return@setOnClickListener
-                }
-
-                isCustomScanning = true
-                btnRunCustomScan.text = "⏹ Dừng quét"
-                tvCustomProgress.text = "Đang quét song song dải $prefix$sHost ~ $prefix$eHost (cổng $targetPortNum)..."
-                log("Bắt đầu quét song song dải IP: $prefix$sHost ~ $prefix$eHost cổng $targetPortNum...")
-
-                cancelCustomScan = scanCustomRange(
-                    baseIp3Octets = prefix,
-                    startHost = sHost,
-                    endHost = eHost,
-                    port = targetPortNum,
-                    timeoutMs = DEFAULT_TCP_TIMEOUT_MS,
-                    maxParallel = SCAN_MAX_PARALLEL,
-                    onEachFound = { foundIp ->
-                        runOnUiThread {
-                            if (found.none { safeIpStr(it) == foundIp }) {
-                                val ipB = ip4(foundIp) ?: byteArrayOf(0, 0, 0, 0)
-                                val dev = createDummyUdpDevice(foundIp, ipB)
-                                found.add(dev)
-                                foundAdapter.add("$foundIp  [Port $targetPortNum]")
-                                result.visibility = View.VISIBLE
-                                refreshWarn()
-                            }
-                            log("✅ Phát hiện máy in phản hồi cổng $targetPortNum tại: $foundIp")
-                        }
-                    },
-                    onProgress = { done, total ->
-                        runOnUiThread {
-                            tvCustomProgress.text = "Đang quét: $done/$total IP..."
-                        }
-                    },
-                    onComplete = { foundList ->
-                        runOnUiThread {
-                            isCustomScanning = false
-                            btnRunCustomScan.text = "▶ Bắt đầu quét dải IP"
-                            tvCustomProgress.text = "Quét hoàn tất! Tìm thấy ${foundList.size} máy in."
-                            log("Quét hoàn tất dải $prefix: tìm thấy ${foundList.size} máy in.")
-                        }
-                    }
-                )
-            }
-        }
-
-        customScanPanel.addView(label("Quét dải IP tùy chỉnh (Hỗ trợ mạng đa dải có định tuyến):", 13f, true))
-        val scanRangeManager = column()
-        val scanRangeInput = EditText(this).apply {
-            hint = "Ví dụ: 192.168.1."
-            inputType = InputType.TYPE_CLASS_TEXT
-            setSingleLine(true)
-        }
-        fun refreshScanRangeManager() {
-            scanRangeManager.removeAllViews()
-            PrinterStore.loadScanRanges().forEach { range ->
-                val removeButton = btn("Xóa") {
-                    val updated = PrinterStore.loadScanRanges().apply { remove(range) }
-                    PrinterStore.saveScanRanges(updated)
-                    refreshScanRangeManager()
-                }
-                scanRangeManager.addView(row(label(range) to 1f, removeButton to 0.35f))
-            }
-        }
-        scanRangeManager.addView(label("Quản lý danh sách dải quét", 14f, true))
-        scanRangeManager.addView(label("Danh sách chỉ là ước lượng các dải thường gặp. Mạng của bạn có thể dùng dải khác; hãy thêm dải nếu biết chính xác."))
-        scanRangeManager.addView(row(
-            scanRangeInput to 1f,
-            btn("Thêm dải") {
-                val range = scanRangeInput.text.toString().trim()
-                val valid = range.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.")) &&
-                    range.dropLast(1).split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }
-                if (!valid) {
-                    log("Dải không hợp lệ. Hãy nhập dạng x.x.x., ví dụ 192.168.1.")
-                } else {
-                    val updated = PrinterStore.loadScanRanges()
-                    if (range !in updated) updated.add(range)
-                    PrinterStore.saveScanRanges(updated)
-                    scanRangeInput.text.clear()
-                    refreshScanRangeManager()
-                }
-            } to 0.65f
-        ))
-        scanRangeManager.addView(btn("Khôi phục danh sách mặc định") {
-            PrinterStore.saveScanRanges(DefaultScanRanges.BUILTIN_RANGES)
-            refreshScanRangeManager()
-        })
-        refreshScanRangeManager()
-
-        val quickScanProgress = label("")
-        var isQuickScanning = false
-        var cancelQuickScan: (() -> Unit)? = null
-        var quickScanStartedAt = 0L
-        val quickScanButton = btn("Quét nhanh các dải mạng phổ biến") {}
-        quickScanButton.setOnClickListener {
-            if (isQuickScanning) {
-                cancelQuickScan?.invoke()
-            } else {
-                val ranges = PrinterStore.loadScanRanges()
-                val targetPort = etPort.text.toString().trim().toIntOrNull() ?: 9100
-                if (ranges.isEmpty()) {
-                    log("Danh sách dải quét đang trống.")
-                    return@setOnClickListener
-                }
-                isQuickScanning = true
-                quickScanStartedAt = System.currentTimeMillis()
-                quickScanButton.text = "Dừng quét nhanh"
-                quickScanProgress.text = "Đang chuẩn bị quét ${ranges.size} dải..."
-                cancelQuickScan = scanAllRangesSequentially(
-                    ranges = ranges,
-                    port = targetPort,
-                    onEachFound = { foundIp ->
-                        runOnUiThread {
-                            if (found.none { safeIpStr(it) == foundIp }) {
-                                val ipBytes = ip4(foundIp) ?: byteArrayOf(0, 0, 0, 0)
-                                found.add(createDummyUdpDevice(foundIp, ipBytes))
-                                foundAdapter.add("$foundIp  [Port $targetPort]")
-                            }
-                            result.visibility = View.VISIBLE
-                            log("Tìm thấy máy in tại $foundIp")
-                        }
-                    },
-                    onRangeProgress = { index, total, prefix ->
-                        runOnUiThread { quickScanProgress.text = "Đang quét dải $index/$total: ${prefix}x..." }
-                    },
-                    onFinalComplete = { summary ->
-                        runOnUiThread {
-                            isQuickScanning = false
-                            quickScanButton.text = "Quét nhanh các dải mạng phổ biến"
-                            cancelQuickScan = null
-                            val elapsedSeconds = (System.currentTimeMillis() - quickScanStartedAt) / 1000.0
-                            quickScanProgress.text = "Đã quét ${summary.rangesScanned} dải (${summary.addressesChecked} địa chỉ), tìm thấy ${summary.printersFound} máy in. Thời gian: ${"%.1f".format(elapsedSeconds)} giây."
-                        }
-                    }
-                )
-            }
-        }
-
-        customScanPanel.addView(etBaseOctets)
-        customScanPanel.addView(row(etStartHost to 1f, etEndHost to 1f, etPort to 1f))
-        customScanPanel.addView(btnRunCustomScan)
-        customScanPanel.addView(tvCustomProgress)
-
-        b.addView(btn("🌐 Quét dải IP tùy chỉnh (Port 9100 - Đa dải mạng)") {
-            customScanPanel.visibility = if (customScanPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        })
-        b.addView(customScanPanel)
-        b.addView(quickScanButton)
-        b.addView(quickScanProgress)
-        b.addView(scanRangeManager)
-
-        result.addView(label("Máy in tìm thấy (chọn để sử dụng):", 15f, true))
-        result.addView(spFound)
-        result.addView(tvWarn)
-        result.addView(btn("Dùng máy in này cho kết nối LAN") {
-            val d = found.getOrNull(spFound.selectedItemPosition)
-            val selectedIp = safeIpStr(d).ifEmpty {
-                spFound.selectedItem?.toString()?.split(" ")?.firstOrNull() ?: ""
-            }
-            if (selectedIp.isEmpty()) return@btn log("Chưa chọn máy in.")
-            printerIp = selectedIp
-            connectType = POSConnect.DEVICE_TYPE_ETHERNET
-            savePrinter()
-            log("Đã chọn máy in LAN đang dùng: $printerIp")
-        })
-        result.addView(btn("➕ Lưu máy in này vào danh sách Máy in của tôi") {
-            val d = found.getOrNull(spFound.selectedItemPosition)
-            val selectedIp = safeIpStr(d).ifEmpty {
-                spFound.selectedItem?.toString()?.split(" ")?.firstOrNull() ?: ""
-            }
-            if (selectedIp.isEmpty()) return@btn log("Chưa chọn máy in.")
-            val mac = safeMacStr(d)
-            val defaultName = "Máy in $selectedIp" + (if (mac.isNotEmpty()) " [$mac]" else "")
-            val etName = EditText(this).apply { setText(defaultName) }
-            AlertDialog.Builder(this)
-                .setTitle("Lưu vào Máy in của tôi")
-                .setMessage("Nhập tên gợi nhớ cho máy in này (Ví dụ: Máy in Quầy 1):")
-                .setView(etName)
-                .setPositiveButton("Lưu") { _, _ ->
-                    val name = etName.text.toString().trim().ifEmpty { defaultName }
-                    val newSaved = SavedPrinter(
-                        name = name,
-                        mac = mac.takeIf { it.isNotEmpty() },
-                        lastIp = selectedIp,
-                        port = printerPort,
-                        connType = POSConnect.DEVICE_TYPE_ETHERNET,
-                        paperWidth = paperWidth
-                    )
-                    PrinterManager.addOrUpdatePrinter(this, newSaved)
-                    PrinterManager.setActivePrinter(this, newSaved.id)
-                    printerIp = selectedIp
-                    savePrinter()
-                    log("✔ Đã lưu '$name' vào danh sách Máy in của tôi.")
-                }
-                .setNegativeButton("Hủy", null)
-                .show()
-        })
-        result.addView(label("Tùy chọn đổi IP máy in:", 15f, true))
-
-        val rg = RadioGroup(this)
-        val rbAuto = radio("Tự động: về cùng dải điện thoại")
-        val rbManual = radio("Nhập tay IP / mask / gateway")
-        val rbDhcp = radio("DHCP: router tự cấp IP")
-        rg.addView(rbAuto)
-        rg.addView(rbManual)
-        rg.addView(rbDhcp)
-
-        val autoInfo = label(
-            if (pn0 != null)
-                "Máy in sẽ nhận IP trống cùng dải ${ipStr(pn0.ip)}, mask ${ipStr(pn0.mask)}, gateway ${ipStr(pn0.gw)}."
-            else "Cần kết nối WiFi điện thoại để tự động."
-        )
-        val manualPanel = column().apply { visibility = View.GONE }
-        val etNewIp = edit("IP mới, vd 192.168.1.100", "", IPTYPE)
-        val etNewMask = edit("Netmask", "255.255.255.0", IPTYPE)
-        val etNewGw = edit("Gateway, vd 192.168.1.1", pn0?.let { ipStr(it.gw) } ?: "", IPTYPE)
-        manualPanel.addView(etNewIp)
-        manualPanel.addView(row(etNewMask to 1f, etNewGw to 1f))
-        val dhcpInfo = label("Máy in tự xin IP từ router. Sau đó bấm 'Tìm máy in' để xem IP mới.")
-        dhcpInfo.visibility = View.GONE
-
-        rg.setOnCheckedChangeListener { _, id ->
-            autoInfo.visibility = if (id == rbAuto.id) View.VISIBLE else View.GONE
-            manualPanel.visibility = if (id == rbManual.id) View.VISIBLE else View.GONE
-            dhcpInfo.visibility = if (id == rbDhcp.id) View.VISIBLE else View.GONE
-        }
-        rg.check(rbAuto.id)
-
-        panel.addView(rg)
-        panel.addView(autoInfo)
-        panel.addView(manualPanel)
-        panel.addView(dhcpInfo)
-        panel.addView(btn("Áp dụng đổi IP") {
-            val dev = found.getOrNull(spFound.selectedItemPosition)
-                ?: return@btn log("Chưa chọn máy in.")
-            when (rg.checkedRadioButtonId) {
-                rbAuto.id -> {
-                    val pn = phoneNet()
-                        ?: return@btn log("Không đọc được mạng WiFi điện thoại.")
-                    thread {
-                        val free = findFreeIp(pn)
-                        runOnUiThread {
-                            val ipB = free?.let { ip4(it) }
-                            if (ipB == null) {
-                                log("Không tìm được IP trống, hãy chọn 'Nhập tay'.")
-                            } else {
-                                confirmChange(dev, ipB, pn.mask, pn.gw, false)
-                            }
-                        }
-                    }
-                }
-                rbManual.id -> {
-                    val ip = ip4(etNewIp.text.toString()) ?: return@btn log("IP mới không hợp lệ")
-                    val mask = ip4(etNewMask.text.toString()) ?: return@btn log("Netmask không hợp lệ")
-                    val gw = ip4(etNewGw.text.toString()) ?: return@btn log("Gateway không hợp lệ")
-                    confirmChange(dev, ip, mask, gw, false)
-                }
-                rbDhcp.id -> confirmChange(dev, dev.ipAddress, dev.mask, dev.gateway, true)
-                else -> log("Hãy chọn một cách đổi IP.")
-            }
-        })
-        result.addView(panel)
-        b.addView(result)
-
-        onFoundUi = { d ->
-            foundAdapter.add(foundLabel(d))
-            result.visibility = View.VISIBLE
-            refreshWarn()
-        }
-        if (found.isNotEmpty()) {
-            found.forEach { foundAdapter.add(foundLabel(it)) }
-            result.visibility = View.VISIBLE
-        }
-    }
-    }
-
-    private fun onFound(d: UdpDevice) {
+    internal fun onFound(d: UdpDevice) {
         try {
             val dMac = safeMacStr(d)
             val dIp = safeIpStr(d)
@@ -1377,7 +881,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun confirmChange(dev: UdpDevice, ip: ByteArray, mask: ByteArray, gw: ByteArray, dhcp: Boolean) {
+    internal fun confirmChange(dev: UdpDevice, ip: ByteArray, mask: ByteArray, gw: ByteArray, dhcp: Boolean) {
         val devMac = safeMacStr(dev)
         val devIp = safeIpStr(dev)
         val msg = if (dhcp) {
@@ -1414,7 +918,7 @@ class MainActivity : Activity() {
 
     // --------------------------------------------- QUÉT DẢI IP MẠNG LAN
 
-    private fun scanLanPort9100(onComplete: (List<String>) -> Unit) {
+    internal fun scanLanPort9100(onComplete: (List<String>) -> Unit) {
         val pn = phoneNet()
         if (pn == null) {
             log("Không đọc được dải IP điện thoại. Hãy bật WiFi.")
@@ -1451,7 +955,7 @@ class MainActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun getConnectedSsid(): String? {
+    internal fun getConnectedSsid(): String? {
         return try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             val info = wm.connectionInfo ?: return null
@@ -1466,7 +970,7 @@ class MainActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun getNearbyWifiSsids(): List<String> {
+    internal fun getNearbyWifiSsids(): List<String> {
         return try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             wm.startScan()
@@ -1482,124 +986,7 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------ TRANG 2: WIFI
 
-    private fun pageWifi() = showPage("Cấu hình WiFi cho máy in", false) { b ->
-        b.addView(label("Gửi tên WiFi & Mật khẩu vào máy in qua kết nối: ${connTypeName()}"))
-        val status = label("")
-        val form = column().apply { visibility = View.GONE }
-
-        b.addView(btn("Kiểm tra kết nối máy in") {
-            thread {
-                val ok = checkActiveConnection()
-                runOnUiThread {
-                    status.text = if (ok) "Kết nối OK! Nhập thông tin WiFi bên dưới." else "Không kết nối được tới máy in (${connTypeName()})."
-                    form.visibility = if (ok) View.VISIBLE else View.GONE
-                }
-            }
-        })
-        b.addView(status)
-        b.addView(form)
-
-        form.addView(label("Thông tin WiFi mới:", 15f, true))
-
-        val wifiAdapter = ArrayAdapter<String>(
-            this, android.R.layout.simple_spinner_dropdown_item, mutableListOf<String>()
-        )
-        val spWifi = Spinner(this).apply { adapter = wifiAdapter }
-        val etSsidManual = edit("Hoặc gõ tay tên WiFi (SSID)")
-        etSsidManual.visibility = View.GONE
-        val cbManualSsid = CheckBox(this).apply { text = "Tự gõ tay tên WiFi (nếu WiFi bị ẩn)" }
-        cbManualSsid.setOnCheckedChangeListener { _, checked ->
-            etSsidManual.visibility = if (checked) View.VISIBLE else View.GONE
-            spWifi.visibility = if (checked) View.GONE else View.VISIBLE
-        }
-
-        fun refreshWifiList() {
-            wifiAdapter.clear()
-            val list = mutableListOf<String>()
-            val active = getConnectedSsid()
-            if (active != null) {
-                list.add(active)
-                log("Tự động chọn WiFi điện thoại đang kết nối: $active")
-            }
-            val nearby = getNearbyWifiSsids()
-            nearby.forEach { if (!list.contains(it)) list.add(it) }
-            if (list.isEmpty()) {
-                list.add("Không tìm thấy WiFi - Hãy bấm Quét")
-            }
-            wifiAdapter.addAll(list)
-            if (active != null) etSsidManual.setText(active)
-        }
-        refreshWifiList()
-
-        form.addView(label("Chọn tên WiFi (SSID) xung quanh hoặc của điện thoại:"))
-        form.addView(spWifi)
-        form.addView(row(
-            btn("Lấy WiFi điện thoại đang nối") {
-                val active = getConnectedSsid()
-                if (active != null) {
-                    val pos = (0 until wifiAdapter.count).firstOrNull { wifiAdapter.getItem(it) == active }
-                    if (pos != null) spWifi.setSelection(pos)
-                    etSsidManual.setText(active)
-                    log("Đã chọn WiFi điện thoại: $active")
-                } else {
-                    log("Không đọc được WiFi điện thoại. Hãy chắc chắn đã bật WiFi & Vị trí.")
-                }
-            } to 1f,
-            btn("Quét danh sách WiFi") {
-                refreshWifiList()
-            } to 1f
-        ))
-        form.addView(cbManualSsid)
-        form.addView(etSsidManual)
-
-        val etPass = edit("Mật khẩu WiFi")
-        val encAdapter = ArrayAdapter<String>(
-            this, android.R.layout.simple_spinner_dropdown_item, encTypes.map { it.first }
-        )
-        val spEnc = Spinner(this)
-        spEnc.adapter = encAdapter
-
-        val cbOwn = CheckBox(this).apply { text = "Nhập IP tĩnh riêng cho WiFi (mặc định giữ IP máy in)" }
-        val ownPanel = column().apply { visibility = View.GONE }
-        val etIp = edit("IP máy in trên WiFi", "", IPTYPE)
-        val etMask = edit("Netmask", "255.255.255.0", IPTYPE)
-        val etGw = edit("Gateway", "", IPTYPE)
-        ownPanel.addView(etIp)
-        ownPanel.addView(row(etMask to 1f, etGw to 1f))
-        cbOwn.setOnCheckedChangeListener { _, checked ->
-            ownPanel.visibility = if (checked) View.VISIBLE else View.GONE
-        }
-
-        form.addView(etPass)
-        form.addView(spEnc)
-        form.addView(cbOwn)
-        form.addView(ownPanel)
-
-        form.addView(btn("Gửi cấu hình WiFi sang máy in") {
-            val ssid = if (cbManualSsid.isChecked) {
-                etSsidManual.text.toString()
-            } else {
-                spWifi.selectedItem?.toString() ?: etSsidManual.text.toString()
-            }
-            if (ssid.isEmpty() || ssid.startsWith("Không tìm thấy")) return@btn log("Tên WiFi (SSID) không hợp lệ")
-            val ip: ByteArray
-            val mask: ByteArray
-            val gw: ByteArray
-            if (cbOwn.isChecked) {
-                ip = ip4(etIp.text.toString()) ?: return@btn log("IP không hợp lệ")
-                mask = ip4(etMask.text.toString()) ?: return@btn log("Netmask không hợp lệ")
-                gw = ip4(etGw.text.toString()) ?: return@btn log("Gateway không hợp lệ")
-            } else {
-                ip = ip4(targetIp()) ?: return@btn log("IP máy in không hợp lệ")
-                val pn = phoneNet()
-                mask = pn?.mask ?: byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 0)
-                gw = pn?.gw ?: byteArrayOf(ip[0], ip[1], ip[2], 1)
-            }
-            sendWifiConfig(ssid, etPass.text.toString(), encTypes[spEnc.selectedItemPosition].second, ip, mask, gw)
-        })
-    }
-
-    private fun sendWifiConfig(
+    internal fun sendWifiConfig(
         ssid: String, pass: String, enc: Byte,
         ip: ByteArray, mask: ByteArray, gw: ByteArray
     ) {
@@ -1626,7 +1013,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun doConnectAndSendWifiConfig(
+    internal fun doConnectAndSendWifiConfig(
         ssid: String, pass: String, enc: Byte,
         ip: ByteArray, mask: ByteArray, gw: ByteArray
     ) {
@@ -1650,171 +1037,13 @@ class MainActivity : Activity() {
 
     // ------------------------------------------ TRANG 4: IN MẪU HÓA ĐƠN & QR
 
-    private fun pagePrintReceipt() = showPage("In Hóa đơn & Mã vạch QR", false) { b ->
-        b.addView(label("Kết nối hiện tại: ${connTypeName()}", 14f, true))
-
-        b.addView(label("1. In mẫu Hóa đơn bán hàng:", 15f, true))
-        b.addView(btn("In mẫu Hóa đơn (Receipt Demo)") {
-            sendPrintData("In mẫu hóa đơn", getReceiptDemoBytes())
-        })
-
-        b.addView(label("2. In Mã vạch 1D & QR Code:", 15f, true))
-        val etBarcode = edit("Nội dung mã vạch / QR Code", "https://xprinter.vn")
-        val rgCode = RadioGroup(this)
-        val rbQr = radio("QR Code thanh toán")
-        val rb1D = radio("Mã vạch 1D (CODE128)")
-        rgCode.addView(rbQr)
-        rgCode.addView(rb1D)
-        rgCode.check(rbQr.id)
-
-        b.addView(etBarcode)
-        b.addView(rgCode)
-        b.addView(btn("In Mã vạch / QR Code") {
-            val content = etBarcode.text.toString()
-            if (content.isEmpty()) return@btn log("Nội dung mã vạch không được trống")
-            val isQr = rgCode.checkedRadioButtonId == rbQr.id
-            sendPrintData(if (isQr) "In QR Code" else "In Barcode 1D", getBarcodeBytes(content, isQr))
-        })
-
-        b.addView(label("3. Lệnh máy in ESC/POS:", 15f, true))
-        b.addView(row(
-            btn("Cắt giấy") { sendPrintData("Cắt giấy", CUT) } to 1f,
-            btn("Mở két tiền") { sendPrintData("Mở két", DRAWER) } to 1f
-        ))
-    }
-
     // ------------------------------------------ TRANG 5: IN TEM NHÃN TSPL
-
-    private fun pagePrintLabel() = showPage("Máy in Tem nhãn (TSPL)", false) { b ->
-        b.addView(label("Dành cho dòng máy in nhãn nhiệt (XP-350B, XP-365B, XP-420B...)", 13f))
-        b.addView(label("Kết nối hiện tại: ${connTypeName()}", 14f, true))
-
-        val etTitle = edit("Tên sản phẩm", "TRÀ SỮA TRANH CHÂU 70%")
-        val etPrice = edit("Giá tiền / Ghi chú", "Giá: 35.000đ - Size L")
-        val etCode = edit("Mã sản phẩm / QR", "SP-888999")
-
-        b.addView(etTitle)
-        b.addView(etPrice)
-        b.addView(etCode)
-
-        b.addView(btn("In tem nhãn mẫu (50x30mm)") {
-            val t = etTitle.text.toString()
-            val p = etPrice.text.toString()
-            val c = etCode.text.toString()
-            sendPrintData("In tem nhãn TSPL", getTsplLabelBytes(t, p, c))
-        })
-        b.addView(label("Cấu hình chế độ máy in:", 14f, true))
-        b.addView(btn("Chuyển máy in sang Chế độ In Tem Nhãn (TSPL)") {
-            val switchTspl = bytes(0x1F, 0x1B, 0x1F, 0x54, 0x53, 0x50, 0x4C)
-            sendPrintData("Chuyển TSPL Mode", switchTspl)
-            log("Đã gửi lệnh chuyển chế độ In Tem (TSPL). Hãy tắt mở lại máy in để áp dụng.")
-        })
-    }
 
     // ---------------------------------------------- TRANG 6: CÔNG CỤ NÂNG CAO
 
-    private fun pageAdvanced() = showPage("Công cụ nâng cao & Reset", false) { b ->
-        val rg = RadioGroup(this)
-        val rbRaw = radio("Gửi gói thô (hex)")
-        val rbListen = radio("Nghe UDP")
-        val rbMode = radio("Chuyển chế độ máy in (In Tem TSPL ↔ In Bill ESC/POS)")
-        val rbReset = radio("Khôi phục cài đặt gốc (Reset Factory)")
-        rg.addView(rbRaw)
-        rg.addView(rbListen)
-        rg.addView(rbMode)
-        rg.addView(rbReset)
-        b.addView(rg)
-
-        // ---- gói thô
-        val rawPanel = column().apply { visibility = View.GONE }
-        rawPanel.addView(printerBar())
-        val protoAdapter = ArrayAdapter<String>(
-            this, android.R.layout.simple_spinner_dropdown_item, listOf("TCP", "UDP")
-        )
-        val spProto = Spinner(this).apply { adapter = protoAdapter }
-        val cbBroadcast = CheckBox(this).apply { text = "Broadcast 255.255.255.255" }
-        cbBroadcast.visibility = View.GONE
-        spProto.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                cbBroadcast.visibility = if (pos == 1) View.VISIBLE else View.GONE
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
-        }
-        val etHex = edit("vd: 1B 40 hoặc 0x1B,0x40")
-        etHex.typeface = Typeface.MONOSPACE
-        etHex.minLines = 2
-        etHex.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        rawPanel.addView(spProto)
-        rawPanel.addView(cbBroadcast)
-        rawPanel.addView(etHex)
-        rawPanel.addView(btn("Gửi gói thô") {
-            val data = parseHex(etHex.text.toString())
-                ?: return@btn log("Hex không hợp lệ (cần số ký tự chẵn, 0-9 A-F)")
-            val port = targetPort() ?: return@btn log("Cổng không hợp lệ")
-            if (spProto.selectedItemPosition == 0) {
-                val active = if (connectType == POSConnect.DEVICE_TYPE_ETHERNET) PrinterStore.getActivePrinter() else null
-                if (active != null) {
-                    PrinterStore.resolvePrinter(
-                        active,
-                        onResolved = { resolvedIp, _ ->
-                            runOnUiThread { printerIp = resolvedIp }
-                            sendTcp(resolvedIp, port, data, "raw")
-                        },
-                        onFailed = { reason ->
-                            log("Gửi gói thô thất bại: $reason")
-                        }
-                    )
-                } else {
-                    sendTcp(targetIp(), port, data, "raw")
-                }
-            } else {
-                val ip = if (cbBroadcast.isChecked) "255.255.255.255" else targetIp()
-                sendUdp(ip, port, data, cbBroadcast.isChecked)
-            }
-        })
-        b.addView(rawPanel)
-
-        // ---- nghe UDP
-        val listenPanel = column().apply { visibility = View.GONE }
-        val etListen = edit("Cổng UDP để nghe, vd 9000", "", InputType.TYPE_CLASS_NUMBER)
-        listenPanel.addView(label("Nghe 20 giây, ghi lại mọi gói UDP gửi tới điện thoại."))
-        listenPanel.addView(etListen)
-        listenPanel.addView(btn("Nghe 20 giây") {
-            val port = etListen.text.toString().trim().toIntOrNull()
-                ?: return@btn log("Nhập cổng UDP để nghe")
-            listenUdp(port)
-        })
-        b.addView(listenPanel)
-
-        // ---- chuyen che do
-        val modePanel = column().apply { visibility = View.GONE }
-        modePanel.addView(label("Chuyển chế độ TSPL / ESC/POS (Máy in 2 chế độ):", 13f, true))
-        modePanel.addView(label(
-            "Đối với máy in 2 chế độ (XP-365B, XP-350B...), cách an toàn và chính xác nhất là chuyển đổi bằng nút bấm cứng trên máy in (giữ nút Feed khi bật nguồn) hoặc sử dụng công cụ Diagnostic Tool chính thức của hãng trên máy tính."
-        ))
-        b.addView(modePanel)
-
-        // ---- reset factory
-        val resetPanel = column().apply { visibility = View.GONE }
-        resetPanel.addView(label("Khôi phục cài đặt gốc (Reset Factory):", 13f, true))
-        resetPanel.addView(label(
-            "Để khôi phục IP và cài đặt mặc định của máy in về nhà sản xuất, vui lòng tắt máy in, giữ nút PAUSE/FEED và bật nguồn lại (theo hướng dẫn của từng model) hoặc dùng công cụ Diagnostic Tool trên PC qua cáp USB."
-        ))
-        b.addView(resetPanel)
-
-        rg.setOnCheckedChangeListener { _, id ->
-            rawPanel.visibility = if (id == rbRaw.id) View.VISIBLE else View.GONE
-            listenPanel.visibility = if (id == rbListen.id) View.VISIBLE else View.GONE
-            modePanel.visibility = if (id == rbMode.id) View.VISIBLE else View.GONE
-            resetPanel.visibility = if (id == rbReset.id) View.VISIBLE else View.GONE
-        }
-        rg.check(rbRaw.id)
-    }
-
     // ------------------------------------------------ CONNECTION HELPERS
 
-    private fun checkActiveConnection(): Boolean {
+    internal fun checkActiveConnection(): Boolean {
         return when (connectType) {
             POSConnect.DEVICE_TYPE_ETHERNET -> tcpCheck(targetIp(), targetPort())
             POSConnect.DEVICE_TYPE_BLUETOOTH -> btMac.isNotEmpty()
@@ -1823,9 +1052,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createSdkConnect() = POSConnect.createDevice(connectType)
+    internal fun createSdkConnect() = POSConnect.createDevice(connectType)
 
-    private fun connectSdkDevice(conn: net.posprinter.IDeviceConnection, listener: IConnectListener) {
+    internal fun connectSdkDevice(conn: net.posprinter.IDeviceConnection, listener: IConnectListener) {
         when (connectType) {
             POSConnect.DEVICE_TYPE_BLUETOOTH -> conn.connect(btMac, listener)
             POSConnect.DEVICE_TYPE_USB -> conn.connect(usbPath, listener)
@@ -1870,7 +1099,7 @@ class MainActivity : Activity() {
                         } else {
                             log("❌ Gửi lệnh in [$label] tới $displayName thất bại sau $attempts lần thử.")
                             AlertDialog.Builder(this@MainActivity)
-                                .setTitle("In tháº¥t báº¡i ($attempts láº§n thá»­)")
+                                .setTitle("In thất bại ($attempts lần thử)")
                                 .setMessage(
                                     "Không thể kết nối hoặc gửi dữ liệu tới $displayName sau $attempts lần thử (đã thử lại với độ trễ 1s, 3s).\n\n" +
                                     "Vui lòng kiểm tra cáp mạng, nguồn điện máy in hoặc dải mạng."
@@ -1905,7 +1134,7 @@ class MainActivity : Activity() {
                             latch.countDown()
                         }
                         POSConnect.CONNECT_FAIL -> {
-                            log("Káº¿t ná»‘i SDK tháº¥t báº¡i: $msg")
+                            log("Kết nối SDK thất bại: $msg")
                             try { conn.close() } catch (_: Exception) {}
                             latch.countDown()
                         }
@@ -1937,7 +1166,7 @@ class MainActivity : Activity() {
     }
     // ------------------------------------------------ SAMPLE GENERATORS
 
-    private fun removeAccents(src: String): String {
+    internal fun removeAccents(src: String): String {
         val temp = java.text.Normalizer.normalize(src, java.text.Normalizer.Form.NFD)
         val pattern = java.util.regex.Pattern.compile("\\p{InCombiningDiacriticalMarks}+")
         return pattern.matcher(temp).replaceAll("")
@@ -1979,7 +1208,7 @@ class MainActivity : Activity() {
         return b.toByteArray()
     }
 
-    private fun getBarcodeBytes(content: String, isQr: Boolean): ByteArray {
+    internal fun getBarcodeBytes(content: String, isQr: Boolean): ByteArray {
         val b = ByteArrayOutputStream()
         b.write(bytes(0x1B, 0x40))
         b.write(bytes(0x1B, 0x61, 0x01)) // Center
@@ -2005,7 +1234,7 @@ class MainActivity : Activity() {
         return b.toByteArray()
     }
 
-    private fun getTsplLabelBytes(title: String, price: String, code: String): ByteArray {
+    internal fun getTsplLabelBytes(title: String, price: String, code: String): ByteArray {
         val t = removeAccents(title)
         val p = removeAccents(price)
         val c = removeAccents(code)
@@ -2024,10 +1253,10 @@ PRINT 1,1
 
     // ------------------------------------------------------------ HELPERS
 
-    private class PhoneNet(val ip: ByteArray, val mask: ByteArray, val gw: ByteArray)
+    internal class PhoneNet(val ip: ByteArray, val mask: ByteArray, val gw: ByteArray)
 
     @Suppress("DEPRECATION")
-    private fun phoneNet(): PhoneNet? {
+    internal fun phoneNet(): PhoneNet? {
         return try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             val d = wm.dhcpInfo ?: return null
@@ -2049,7 +1278,7 @@ PRINT 1,1
         }
     }
 
-    private fun sameSubnet(a: ByteArray?, b: ByteArray?, mask: ByteArray?): Boolean {
+    internal fun sameSubnet(a: ByteArray?, b: ByteArray?, mask: ByteArray?): Boolean {
         if (a == null || b == null || mask == null) return false
         if (a.size < 4 || b.size < 4 || mask.size < 4) return false
         for (i in 0..3) {
@@ -2058,7 +1287,7 @@ PRINT 1,1
         return true
     }
 
-    private fun findFreeIp(pn: PhoneNet): String? {
+    internal fun findFreeIp(pn: PhoneNet): String? {
         if (ipStr(pn.mask) != "255.255.255.0") {
             log("Mask ${ipStr(pn.mask)} không phải /24, hãy nhập IP mới thủ công.")
             return null
@@ -2076,7 +1305,7 @@ PRINT 1,1
         return null
     }
 
-    private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
+    internal fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
 
     private fun hex(b: ByteArray, n: Int = b.size) =
         (0 until n).joinToString(" ") { "%02X".format(b[it]) }
@@ -2085,7 +1314,7 @@ PRINT 1,1
         (0 until n).map { b[it].toInt().toChar() }
             .joinToString("") { if (it.code in 32..126) it.toString() else "." }
 
-    private fun parseHex(s: String): ByteArray? {
+    internal fun parseHex(s: String): ByteArray? {
         val clean = s.replace("0x", "", ignoreCase = true).filter {
             it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F'
         }
@@ -2095,7 +1324,7 @@ PRINT 1,1
         }
     }
 
-    private fun ip4(s: String): ByteArray? {
+    internal fun ip4(s: String): ByteArray? {
         val p = s.trim().split(".")
         if (p.size != 4) return null
         val out = ByteArray(4)
@@ -2107,9 +1336,9 @@ PRINT 1,1
         return out
     }
 
-    private fun ipStr(b: ByteArray) = b.joinToString(".") { (it.toInt() and 0xFF).toString() }
+    internal fun ipStr(b: ByteArray) = b.joinToString(".") { (it.toInt() and 0xFF).toString() }
 
-    private fun tcpCheck(ip: String, port: Int): Boolean {
+    internal fun tcpCheck(ip: String, port: Int): Boolean {
         val t0 = System.currentTimeMillis()
         return try {
             Socket().use { it.connect(InetSocketAddress(ip, port), 3000) }
@@ -2121,7 +1350,7 @@ PRINT 1,1
         }
     }
 
-    private fun sendTcpSync(ip: String, port: Int, data: ByteArray, label: String): Boolean {
+    internal fun sendTcpSync(ip: String, port: Int, data: ByteArray, label: String): Boolean {
         return try {
             Socket().use { s ->
                 s.connect(InetSocketAddress(ip, port), 3000)
@@ -2145,12 +1374,12 @@ PRINT 1,1
         }
     }
 
-    private fun sendTcp(ip: String, port: Int, data: ByteArray, label: String) {
+    internal fun sendTcp(ip: String, port: Int, data: ByteArray, label: String) {
         thread {
             sendTcpSync(ip, port, data, label)
         }
     }
-    private fun sendUdp(ip: String, port: Int, data: ByteArray, broadcast: Boolean) {
+    internal fun sendUdp(ip: String, port: Int, data: ByteArray, broadcast: Boolean) {
         thread {
             try {
                 DatagramSocket().use { s ->
@@ -2181,7 +1410,7 @@ PRINT 1,1
         }
     }
 
-    private fun listenUdp(port: Int) {
+    internal fun listenUdp(port: Int) {
         thread {
             try {
                 DatagramSocket(null).use { s ->
@@ -2213,7 +1442,7 @@ PRINT 1,1
         }
     }
 
-    private val ESC_INIT = bytes(0x1B, 0x40)
-    private val CUT = bytes(0x1D, 0x56, 0x42, 0x00)
-    private val DRAWER = bytes(0x1B, 0x70, 0x00, 0x19, 0xFA)
+    internal val ESC_INIT = bytes(0x1B, 0x40)
+    internal val CUT = bytes(0x1D, 0x56, 0x42, 0x00)
+    internal val DRAWER = bytes(0x1B, 0x70, 0x00, 0x19, 0xFA)
 }
