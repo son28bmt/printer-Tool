@@ -3,11 +3,18 @@ package com.example.xptool
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.InetSocketAddress
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Calendar
 import java.util.Date
+import java.util.Collections
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 internal data class AttendancePunch(
     val userId: String,
@@ -30,6 +37,64 @@ internal object ZkAttendanceReader {
     private const val TCP_MAGIC_1 = 20560
     private const val TCP_MAGIC_2 = 32130
 
+    fun scanNetwork(
+        prefix: String,
+        port: Int = 4370,
+        onFound: (String) -> Unit,
+        onProgress: (Int, Int) -> Unit,
+        onComplete: (List<String>) -> Unit
+    ): () -> Unit {
+        val normalizedPrefix = if (prefix.endsWith('.')) prefix else "$prefix."
+        require(normalizedPrefix.matches(Regex("(?:[0-9]{1,3}\\.){3}"))) { "Dải IP không hợp lệ." }
+        require(normalizedPrefix.dropLast(1).split('.').all { it.toInt() in 0..255 }) { "Dải IP không hợp lệ." }
+
+        val cancelled = AtomicBoolean(false)
+        val completed = AtomicBoolean(false)
+        val done = AtomicInteger(0)
+        val found = Collections.synchronizedList(mutableListOf<String>())
+        val executor = Executors.newFixedThreadPool(32)
+        for (host in 1..254) {
+            executor.execute {
+                if (!cancelled.get()) {
+                    val ip = "$normalizedPrefix$host"
+                    if (tcpConnectWithTimeout(ip, port, 500) || probeUdp(ip, port, 450)) {
+                        found.add(ip)
+                        onFound(ip)
+                    }
+                }
+                val count = done.incrementAndGet()
+                onProgress(count, 254)
+                if (count == 254 && !cancelled.get() && completed.compareAndSet(false, true)) {
+                    executor.shutdown()
+                    onComplete(synchronized(found) { found.distinct().sorted() })
+                }
+            }
+        }
+        return {
+            if (cancelled.compareAndSet(false, true)) executor.shutdownNow()
+        }
+    }
+
+    private fun probeUdp(ip: String, port: Int, timeoutMs: Int): Boolean {
+        return try {
+            DatagramSocket().use { socket ->
+                socket.soTimeout = timeoutMs
+                val request = packet(CMD_CONNECT, 0, 0, 1, byteArrayOf())
+                socket.send(DatagramPacket(request, request.size, InetSocketAddress(ip, port)))
+                val buffer = ByteArray(128)
+                val response = DatagramPacket(buffer, buffer.size)
+                socket.receive(response)
+                if (response.length < 8) return false
+                val command = leShort(buffer, 0)
+                command == CMD_ACK_OK || command == CMD_ACK_UNAUTH
+            }
+        } catch (_: SocketTimeoutException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun read(ip: String, port: Int, commKey: Int): List<AttendancePunch> {
         require(ip.matches(Regex("[0-9]{1,3}(\\.[0-9]{1,3}){3}"))) { "Nhập địa chỉ IPv4 hợp lệ." }
         require(ip.split('.').all { it.toInt() in 0..255 }) { "Địa chỉ IP không hợp lệ." }
@@ -46,7 +111,7 @@ internal object ZkAttendanceReader {
 
             fun command(id: Int, body: ByteArray = byteArrayOf()): Frame {
                 val nextReply = (reply + 1) % 65535
-                val inner = packet(id, session, nextReply, body)
+                val inner = packet(id, session, reply, nextReply, body)
                 val outer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
                     .putShort(TCP_MAGIC_1.toShort()).putShort(TCP_MAGIC_2.toShort())
                     .putInt(inner.size).array()
@@ -124,11 +189,12 @@ internal object ZkAttendanceReader {
         return collected.toByteArray()
     }
 
-    private fun packet(command: Int, session: Int, reply: Int, body: ByteArray): ByteArray {
+    private fun packet(command: Int, session: Int, checksumReply: Int, reply: Int, body: ByteArray): ByteArray {
         val buffer = ByteBuffer.allocate(8 + body.size).order(ByteOrder.LITTLE_ENDIAN)
-            .putShort(command.toShort()).putShort(0).putShort(session.toShort()).putShort(reply.toShort()).put(body)
+            .putShort(command.toShort()).putShort(0).putShort(session.toShort()).putShort(checksumReply.toShort()).put(body)
         val bytes = buffer.array()
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putShort(2, checksum(bytes).toShort())
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putShort(6, reply.toShort())
         return bytes
     }
 

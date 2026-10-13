@@ -5,12 +5,20 @@ import android.content.Context
 import android.text.InputType
 import android.view.View
 import android.widget.TextView
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20", false) { body ->
     val activity = this
     val prefs = getSharedPreferences("zk_attendance", Context.MODE_PRIVATE)
+    val brands = listOf("ZKTeco", "Hikvision ISAPI", "Dahua CGI")
+    val brandPicker = Spinner(activity).apply {
+        adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, brands)
+        setSelection(prefs.getInt("brand", 0).coerceIn(brands.indices))
+    }
+    body.addView(brandPicker)
     val ipField = edit("IP máy chấm công", prefs.getString("ip", "") ?: "", InputType.TYPE_CLASS_TEXT)
     val portField = edit("Cổng TCP", prefs.getInt("port", 4370).toString(), InputType.TYPE_CLASS_NUMBER)
     val keyField = edit("Khóa giao tiếp (để 0 nếu máy không đặt)", "0", InputType.TYPE_CLASS_NUMBER)
@@ -19,6 +27,26 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
     })
     body.addView(row(ipField to 2.2f, portField to 1f))
     body.addView(keyField)
+    val userField = edit("Device username", prefs.getString("user", "") ?: "", InputType.TYPE_CLASS_TEXT)
+    val passwordField = edit("Device password", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+    body.addView(userField)
+    body.addView(passwordField)
+    fun updateBrandFields(index: Int) {
+        keyField.visibility = if (index == 0) View.VISIBLE else View.GONE
+        userField.visibility = if (index == 0) View.GONE else View.VISIBLE
+        passwordField.visibility = if (index == 0) View.GONE else View.VISIBLE
+        if (portField.text.isNullOrBlank() || portField.text.toString() == "4370" || portField.text.toString() == "80") {
+            portField.setText(if (index == 0) "4370" else "80")
+        }
+    }
+    updateBrandFields(brandPicker.selectedItemPosition)
+    brandPicker.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+            prefs.edit().putInt("brand", position).apply()
+            updateBrandFields(position)
+        }
+    }
 
     val scanStatus = label("Quét mạng Wi‑Fi hiện tại để tìm thiết bị đang mở cổng 4370.", 12f).apply {
         setTextColor(colorMuted)
@@ -43,26 +71,23 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
             return@setOnClickListener
         }
         val prefix = "${network.ip[0].toInt() and 0xFF}.${network.ip[1].toInt() and 0xFF}.${network.ip[2].toInt() and 0xFF}."
+        val scanPort = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: 4370
         val found = java.util.Collections.synchronizedList(mutableListOf<String>())
         discoveredDevices.removeAllViews()
         scanButton.text = "Dừng quét"
-        scanStatus.text = "Đang quét ${prefix}1–254 tại cổng 4370…"
-        log("Đang quét mạng $prefix để tìm máy chấm công ZKTeco trên cổng 4370.")
-        cancelScan = scanCustomRange(
-            baseIp3Octets = prefix,
-            startHost = 1,
-            endHost = 254,
-            port = 4370,
-            timeoutMs = 500,
-            maxParallel = 32,
+        scanStatus.text = "Đang dò ${prefix}1–254 qua TCP/UDP cổng $scanPort…"
+        log("Đang dò máy ZKTeco trong mạng $prefix qua TCP/UDP cổng $scanPort.")
+        cancelScan = ZkAttendanceReader.scanNetwork(
+            prefix = prefix,
+            port = scanPort,
             onEachFound = { foundIp ->
                 found.add(foundIp)
                 activity.runOnUiThread {
                     scanStatus.text = "Đã tìm thấy ${found.size} thiết bị. Chạm vào IP để chọn."
                     discoveredDevices.addView(activity.btn("Chọn $foundIp") {
                         ipField.setText(foundIp)
-                        portField.setText("4370")
-                        activity.log("Đã chọn máy chấm công tại $foundIp:4370.")
+                        portField.setText(scanPort.toString())
+                        activity.log("Đã chọn máy chấm công tại $foundIp:$scanPort.")
                     })
                 }
             },
@@ -76,11 +101,11 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
                     cancelScan = null
                     scanButton.text = "Tự quét tìm máy chấm công"
                     scanStatus.text = if (ips.isEmpty()) {
-                        "Không tìm thấy thiết bị mở cổng 4370. Kiểm tra cùng mạng Wi‑Fi và cài đặt TCP/IP của máy."
+                        "Không phát hiện máy ở cổng $scanPort trong dải $prefix. Có thể K20 ở dải mạng khác hoặc Wi‑Fi đang chặn thiết bị giao tiếp với nhau."
                     } else {
                         "Tìm thấy ${ips.size} thiết bị. Chạm vào IP cần dùng."
                     }
-                    activity.log("Quét xong: tìm thấy ${ips.size} thiết bị mở cổng 4370.")
+                    activity.log("Dò xong qua TCP/UDP cổng $scanPort: tìm thấy ${ips.size} thiết bị.")
                 }
             }
         )
@@ -113,8 +138,18 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         fetchButton.isEnabled = false
         fetchButton.text = "Đang kết nối…"
         log("Đang đọc bản ghi từ K20 tại $ip:$port.")
+        val brandIndex = brandPicker.selectedItemPosition
+        val deviceUser = userField.text.toString()
+        val devicePassword = passwordField.text.toString()
+        prefs.edit().putString("user", deviceUser).apply()
         Thread {
-            val outcome = runCatching { ZkAttendanceReader.read(ip, port, key) }
+            val outcome = runCatching {
+                when (brandIndex) {
+                    1 -> OtherAttendanceReaders.hikvision(ip, port, deviceUser, devicePassword)
+                    2 -> OtherAttendanceReaders.dahua(ip, port, deviceUser, devicePassword)
+                    else -> ZkAttendanceReader.read(ip, port, key)
+                }
+            }
             runOnUiThread {
                 fetchButton.isEnabled = true
                 fetchButton.text = "Đọc bản ghi chấm công"
