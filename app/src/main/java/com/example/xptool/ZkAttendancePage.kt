@@ -80,7 +80,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         cancelScan = ZkAttendanceReader.scanNetwork(
             prefix = prefix,
             port = scanPort,
-            onEachFound = { foundIp ->
+            onFound = { foundIp ->
                 found.add(foundIp)
                 activity.runOnUiThread {
                     scanStatus.text = "Đã tìm thấy ${found.size} thiết bị. Chạm vào IP để chọn."
