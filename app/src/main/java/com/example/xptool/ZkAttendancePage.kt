@@ -10,11 +10,20 @@ import android.widget.ArrayAdapter
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20", false) { body ->
+internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua Wi-Fi/LAN", false) { body ->
     val activity = this
     val prefs = getSharedPreferences("zk_attendance", Context.MODE_PRIVATE)
-    val brands = listOf("ZKTeco", "Hikvision ISAPI", "Dahua CGI")
-    val savedBrand = prefs.getInt("brand", 0).coerceIn(brands.indices)
+    val brands = listOf("ZKTeco", "Hikvision ISAPI", "Dahua CGI", "Tự nhận diện hãng hỗ trợ")
+    if (!prefs.getBoolean("port_defaults_corrected", false)) {
+        prefs.edit()
+            .putInt("port_0", if (prefs.getInt("port_0", 4370) == 80) 4370 else prefs.getInt("port_0", 4370))
+            .putInt("port_1", if (prefs.getInt("port_1", 80) == 4370) 80 else prefs.getInt("port_1", 80))
+            .putInt("port_2", if (prefs.getInt("port_2", 80) == 4370) 80 else prefs.getInt("port_2", 80))
+            .putBoolean("port_defaults_corrected", true)
+            .apply()
+    }
+    val savedBrand = (if (prefs.getBoolean("auto_detect_option_added", false)) prefs.getInt("brand", 3) else 3).coerceIn(brands.indices)
+    prefs.edit().putBoolean("auto_detect_option_added", true).putInt("brand", savedBrand).apply()
     val brandPicker = Spinner(activity).apply {
         adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, brands)
         setSelection(savedBrand)
@@ -24,7 +33,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
     val defaultPort = if (savedBrand == 0) 4370 else 80
     val portField = edit("Cổng TCP", prefs.getInt("port_$savedBrand", defaultPort).toString(), InputType.TYPE_CLASS_NUMBER)
     val keyField = edit("Khóa giao tiếp (để 0 nếu máy không đặt)", "0", InputType.TYPE_CLASS_NUMBER)
-    body.addView(label("Điện thoại và K20 cần ở cùng mạng Wi‑Fi/LAN. Chức năng này chỉ đọc bản ghi, không xóa dữ liệu trên máy.", 13f).apply {
+    body.addView(label("Điện thoại và máy chấm công cần ở cùng mạng Wi‑Fi/LAN. Chức năng này chỉ đọc bản ghi, không xóa dữ liệu trên máy.", 13f).apply {
         setTextColor(colorMuted)
     })
     body.addView(row(ipField to 2.2f, portField to 1f))
@@ -35,8 +44,8 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
     body.addView(passwordField)
     fun updateBrandFields(index: Int) {
         keyField.visibility = if (index == 0) View.VISIBLE else View.GONE
-        userField.visibility = if (index == 0) View.GONE else View.VISIBLE
-        passwordField.visibility = if (index == 0) View.GONE else View.VISIBLE
+        userField.visibility = if (index == 1 || index == 2) View.VISIBLE else View.GONE
+        passwordField.visibility = if (index == 1 || index == 2) View.VISIBLE else View.GONE
     }
     var activeBrand = savedBrand
     updateBrandFields(brandPicker.selectedItemPosition)
@@ -54,7 +63,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         }
     }
 
-    val scanStatus = label("Quét mạng Wi‑Fi hiện tại để tìm thiết bị đang mở cổng 4370.", 12f).apply {
+    val scanStatus = label("Quét mạng Wi‑Fi hiện tại để dò máy chấm công.", 12f).apply {
         setTextColor(colorMuted)
     }
     body.addView(scanStatus)
@@ -78,17 +87,61 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         }
         val prefix = "${network.ip[0].toInt() and 0xFF}.${network.ip[1].toInt() and 0xFF}.${network.ip[2].toInt() and 0xFF}."
         val brandIndex = brandPicker.selectedItemPosition
+        if (brandIndex == 3) {
+            val detected = java.util.Collections.synchronizedList(mutableListOf<AttendanceDeviceCandidate>())
+            discoveredDevices.removeAllViews()
+            scanButton.text = "Dừng quét"
+            scanStatus.text = "Đang dò giao thức ZKTeco, Hikvision và Dahua trong mạng $prefix…"
+            cancelScan = ZkAttendanceReader.scanKnownProtocols(
+                prefix = prefix,
+                onFound = { candidate ->
+                    detected.add(candidate)
+                    activity.runOnUiThread {
+                        scanStatus.text = "Tìm thấy ${detected.size} phản hồi giao thức. Chạm để chọn thiết bị."
+                        discoveredDevices.addView(activity.btn("${brands[candidate.brandIndex]} · ${candidate.ip}") {
+                            ipField.setText(candidate.ip)
+                            brandPicker.setSelection(candidate.brandIndex)
+                            portField.setText(candidate.port.toString())
+                            activity.log("Selected ${brands[candidate.brandIndex]} at ${candidate.ip}:${candidate.port}.")
+                        })
+                    }
+                },
+                onProgress = { done, total ->
+                    if (done == total || done % 32 == 0) activity.runOnUiThread {
+                        scanStatus.text = "Đang tự nhận diện… $done/$total địa chỉ · ${detected.size} kết quả"
+                    }
+                },
+                onComplete = { matches ->
+                    activity.runOnUiThread {
+                        cancelScan = null
+                        scanButton.text = "Tự quét tìm máy chấm công"
+                        scanStatus.text = if (matches.isEmpty()) {
+                            "Không giao thức nào trong danh sách phản hồi trên mạng hiện tại."
+                        } else {
+                            "Tìm thấy ${matches.size} phản hồi giao thức. Chạm vào hãng/IP để chọn."
+                        }
+                    }
+                }
+            )
+            return@setOnClickListener
+        }
         val brandDefaultPort = if (brandIndex == 0) 4370 else 80
         val scanPort = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: brandDefaultPort
+        val httpProbePath = when (brandIndex) {
+            1 -> "/ISAPI/System/deviceInfo"
+            2 -> "/cgi-bin/magicBox.cgi?action=getSystemInfo"
+            else -> null
+        }
         val found = java.util.Collections.synchronizedList(mutableListOf<String>())
         discoveredDevices.removeAllViews()
         scanButton.text = "Dừng quét"
         scanStatus.text = "Đang dò ${prefix}1–254 qua TCP/UDP cổng $scanPort…"
-        log("Đang dò máy ZKTeco trong mạng $prefix qua TCP/UDP cổng $scanPort.")
+        log("Đang dò ${brands[brandIndex]} trong mạng $prefix qua cổng $scanPort.")
         cancelScan = ZkAttendanceReader.scanNetwork(
             prefix = prefix,
             port = scanPort,
             requireZkResponse = brandIndex == 0,
+            httpProbePath = httpProbePath,
             onFound = { foundIp ->
                 found.add(foundIp)
                 activity.runOnUiThread {
@@ -110,7 +163,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
                     cancelScan = null
                     scanButton.text = "Tự quét tìm máy chấm công"
                     scanStatus.text = if (ips.isEmpty()) {
-                        "Không phát hiện máy ở cổng $scanPort trong dải $prefix. Có thể K20 ở dải mạng khác hoặc Wi‑Fi đang chặn thiết bị giao tiếp với nhau."
+                        "Không phát hiện thiết bị ${brands[brandIndex]} ở cổng $scanPort trong dải $prefix."
                     } else {
                         "Tìm thấy ${ips.size} thiết bị. Chạm vào IP cần dùng."
                     }
@@ -142,13 +195,17 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         val port = portField.text.toString().trim().toIntOrNull() ?: brandDefaultPort
         val key = keyField.text.toString().trim().toIntOrNull() ?: 0
         if (ip.isBlank()) {
-            log("Nhập IP của máy chấm công ZKTeco K20.")
+            log("Nhập IP của máy chấm công.")
+            return@setOnClickListener
+        }
+        if (brandIndex == 3) {
+            log("Chạy tự nhận diện rồi chọn hãng/thiết bị trước khi đọc dữ liệu.")
             return@setOnClickListener
         }
         prefs.edit().putString("ip", ip).putInt("port_$brandIndex", port).apply()
         fetchButton.isEnabled = false
         fetchButton.text = "Đang kết nối…"
-        log("Đang đọc bản ghi từ K20 tại $ip:$port.")
+        log("Đang đọc bản ghi từ ${brands[brandIndex]} tại $ip:$port.")
         val deviceUser = userField.text.toString()
         val devicePassword = passwordField.text.toString()
         prefs.edit().putString("user", deviceUser).apply()
@@ -176,7 +233,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
                         })
                     }
                     results.visibility = View.VISIBLE
-                    log("Đã đọc ${punches.size} bản ghi chấm công từ K20.")
+                    log("Đã đọc ${punches.size} bản ghi chấm công từ ${brands[brandIndex]}.")
                 }.onFailure { error ->
                     val message = error.message ?: error.javaClass.simpleName
                     log("Không đọc được dữ liệu chấm công: $message")
@@ -203,7 +260,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Chấm công ZKTeco K20
         }
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
-            putExtra(Intent.EXTRA_SUBJECT, "Bản ghi chấm công ZKTeco K20")
+            putExtra(Intent.EXTRA_SUBJECT, "Attendance records")
             putExtra(Intent.EXTRA_TEXT, csv)
         }
         startActivity(Intent.createChooser(send, "Chia sẻ dữ liệu chấm công"))

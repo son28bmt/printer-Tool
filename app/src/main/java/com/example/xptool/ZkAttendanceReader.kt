@@ -3,6 +3,8 @@ package com.example.xptool
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.InetSocketAddress
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.Socket
@@ -23,6 +25,12 @@ internal data class AttendancePunch(
     val method: Int
 )
 
+internal data class AttendanceDeviceCandidate(
+    val ip: String,
+    val brandIndex: Int,
+    val port: Int
+)
+
 internal object ZkAttendanceReader {
     private const val CMD_CONNECT = 1000
     private const val CMD_EXIT = 1001
@@ -41,6 +49,7 @@ internal object ZkAttendanceReader {
         prefix: String,
         port: Int = 4370,
         requireZkResponse: Boolean = false,
+        httpProbePath: String? = null,
         onFound: (String) -> Unit,
         onProgress: (Int, Int) -> Unit,
         onComplete: (List<String>) -> Unit
@@ -60,6 +69,8 @@ internal object ZkAttendanceReader {
                     val ip = "$normalizedPrefix$host"
                     val detected = if (requireZkResponse) {
                         probeZkTcp(ip, port, 500) || probeUdp(ip, port, 450)
+                    } else if (httpProbePath != null) {
+                        probeHttpApi(ip, port, httpProbePath)
                     } else {
                         tcpConnectWithTimeout(ip, port, 500) || probeUdp(ip, port, 450)
                     }
@@ -79,6 +90,65 @@ internal object ZkAttendanceReader {
         return {
             if (cancelled.compareAndSet(false, true)) executor.shutdownNow()
         }
+    }
+
+    fun scanKnownProtocols(
+        prefix: String,
+        onFound: (AttendanceDeviceCandidate) -> Unit,
+        onProgress: (Int, Int) -> Unit,
+        onComplete: (List<AttendanceDeviceCandidate>) -> Unit
+    ): () -> Unit {
+        val normalizedPrefix = if (prefix.endsWith('.')) prefix else "$prefix."
+        require(normalizedPrefix.matches(Regex("(?:[0-9]{1,3}\\.){3}"))) { "Invalid IP range." }
+        require(normalizedPrefix.dropLast(1).split('.').all { it.toInt() in 0..255 }) { "Invalid IP range." }
+        val cancelled = AtomicBoolean(false)
+        val completed = AtomicBoolean(false)
+        val done = AtomicInteger(0)
+        val found = Collections.synchronizedList(mutableListOf<AttendanceDeviceCandidate>())
+        val executor = Executors.newFixedThreadPool(32)
+        for (host in 1..254) executor.execute {
+            if (!cancelled.get()) {
+                val ip = "$normalizedPrefix$host"
+                val candidates = buildList {
+                    if (probeZkTcp(ip, 4370, 300) || probeUdp(ip, 4370, 300)) {
+                        add(AttendanceDeviceCandidate(ip, 0, 4370))
+                    }
+                    if (probeHttpApi(ip, 80, "/ISAPI/System/deviceInfo")) {
+                        add(AttendanceDeviceCandidate(ip, 1, 80))
+                    }
+                    if (probeHttpApi(ip, 80, "/cgi-bin/magicBox.cgi?action=getSystemInfo")) {
+                        add(AttendanceDeviceCandidate(ip, 2, 80))
+                    }
+                }
+                candidates.forEach { candidate ->
+                    found.add(candidate)
+                    onFound(candidate)
+                }
+            }
+            val count = done.incrementAndGet()
+            onProgress(count, 254)
+            if (count == 254 && !cancelled.get() && completed.compareAndSet(false, true)) {
+                executor.shutdown()
+                onComplete(synchronized(found) { found.distinct().sortedWith(compareBy({ it.ip }, { it.brandIndex })) })
+            }
+        }
+        return { if (cancelled.compareAndSet(false, true)) executor.shutdownNow() }
+    }
+
+    private fun probeHttpApi(ip: String, port: Int, path: String): Boolean = try {
+        val connection = (URL("http://$ip:$port$path").openConnection() as HttpURLConnection).apply {
+            connectTimeout = 500
+            readTimeout = 500
+            instanceFollowRedirects = false
+            requestMethod = "GET"
+        }
+        try {
+            connection.responseCode in setOf(200, 401, 403)
+        } finally {
+            connection.disconnect()
+        }
+    } catch (_: Exception) {
+        false
     }
 
     private fun probeZkTcp(ip: String, port: Int, timeoutMs: Int): Boolean = try {
