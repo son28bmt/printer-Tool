@@ -40,6 +40,7 @@ internal object ZkAttendanceReader {
     fun scanNetwork(
         prefix: String,
         port: Int = 4370,
+        requireZkResponse: Boolean = false,
         onFound: (String) -> Unit,
         onProgress: (Int, Int) -> Unit,
         onComplete: (List<String>) -> Unit
@@ -57,7 +58,12 @@ internal object ZkAttendanceReader {
             executor.execute {
                 if (!cancelled.get()) {
                     val ip = "$normalizedPrefix$host"
-                    if (tcpConnectWithTimeout(ip, port, 500) || probeUdp(ip, port, 450)) {
+                    val detected = if (requireZkResponse) {
+                        probeZkTcp(ip, port, 500) || probeUdp(ip, port, 450)
+                    } else {
+                        tcpConnectWithTimeout(ip, port, 500) || probeUdp(ip, port, 450)
+                    }
+                    if (detected) {
                         found.add(ip)
                         onFound(ip)
                     }
@@ -73,6 +79,26 @@ internal object ZkAttendanceReader {
         return {
             if (cancelled.compareAndSet(false, true)) executor.shutdownNow()
         }
+    }
+
+    private fun probeZkTcp(ip: String, port: Int, timeoutMs: Int): Boolean = try {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress(ip, port), timeoutMs)
+            socket.soTimeout = timeoutMs
+            val inner = packet(CMD_CONNECT, 0, 0, 1, byteArrayOf())
+            val outer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+                .putShort(TCP_MAGIC_1.toShort()).putShort(TCP_MAGIC_2.toShort())
+                .putInt(inner.size).array()
+            socket.getOutputStream().apply {
+                write(outer)
+                write(inner)
+                flush()
+            }
+            val response = readFrame(socket.getInputStream())
+            response.command == CMD_ACK_OK || response.command == CMD_ACK_UNAUTH
+        }
+    } catch (_: Exception) {
+        false
     }
 
     private fun probeUdp(ip: String, port: Int, timeoutMs: Int): Boolean {
