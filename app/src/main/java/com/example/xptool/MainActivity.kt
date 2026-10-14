@@ -549,6 +549,27 @@ class MainActivity : Activity() {
         ManagePrintersPage.buildView(this, b, { label, data -> sendPrintData(label, data) }, { msg -> log(msg) })
     }
 
+    private fun featureCategoryButton(title: String, onClick: () -> Unit) = btn(title, onClick).apply {
+        minHeight = dp(54)
+        textSize = 15f
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(10) }
+    }
+
+    private fun openFeatureCategory(
+        title: String,
+        features: List<Triple<String, String, () -> Unit>>
+    ) {
+        showPage(title, false) { body ->
+            body.addView(label("Chọn tính năng để sử dụng", 14f).apply { setTextColor(colorMuted) })
+            features.forEach { (name, description, action) ->
+                body.addView(menuBtn(name, description, action))
+            }
+        }
+    }
+
     private fun showHome(skipAutoRefreshTrigger: Boolean = false) {
         showPage("XP Tool by QuangSonAIBAT", true) { b ->
         val active = PrinterManager.getActivePrinter()
@@ -751,27 +772,42 @@ class MainActivity : Activity() {
             b.addView(listCol)
         }
 
-        b.addView(sectionTitle("Kết nối máy in"))
-        b.addView(menuBtn("🔍 Chẩn đoán kết nối 1 chạm", "Tự động kiểm tra WiFi, Router, IP máy in, nắp máy & nạp giấy") { pageDiagnostics() })
-        b.addView(menuBtn("0. Quản lý Máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy") { pageManagePrinters() })
-        b.addView(menuBtn("1. Chọn giao tiếp kết nối", "Chuyển giữa Mạng LAN/WiFi, Bluetooth và USB OTG") { pageSelectConnection() })
-        b.addView(menuBtn("2. Tìm máy in LAN & Đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in") { pageNetwork() })
+        if (PrinterManager.savedPrinters.isNotEmpty()) {
+            b.addView(sectionTitle("Tìm máy in"))
+            b.addView(btn("Tìm máy in") { pageNetwork() })
+        }
 
-        b.addView(sectionTitle("Thiết lập và in"))
-        b.addView(menuBtn("3. Cấu hình WiFi cho máy in", "Gửi Tên WiFi & Mật khẩu vào máy in") { pageWifi() })
-        b.addView(menuBtn("4. In mẫu Hóa đơn & Mã vạch QR", "In Receipt Demo, mã vạch 1D, QR Code thanh toán") { pagePrintReceipt() })
-        b.addView(menuBtn("5. Máy in Tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...") { pagePrintLabel() })
-        b.addView(menuBtn("9. Cài đặt máy in (Hãng Xprinter)", "Density, Width, Beep, Alarm, Replay, Restore factory") { pagePrinterSettings() })
-
-        b.addView(sectionTitle("Chia sẻ và tự động hóa"))
-        b.addView(menuBtn("10. Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100") { pagePrintBridge() })
-        b.addView(menuBtn("11. Tự động in từ thông báo (Giai đoạn 5)", "Tự động in đơn Grab, ShopeeFood, Bank... khi có thông báo") { pageNotificationPrint() })
-
-        b.addView(sectionTitle("Tiện ích"))
-        b.addView(menuBtn("12. Chấm công ZKTeco K20", "Đọc và chia sẻ bản ghi chấm công qua Wi‑Fi/LAN") { pageZkAttendance() })
-        b.addView(menuBtn("6. Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP") { pageAdvanced() })
-        b.addView(menuBtn("8. Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test") { pageInfoTest() })
-        b.addView(menuBtn("7. Thông tin ứng dụng & Bảo mật", "Chính sách bảo mật Privacy Policy, tác giả QuangSonAIBAT") { pageAbout() })
+        b.addView(sectionTitle("Chọn tính năng để sử dụng"))
+        b.addView(featureCategoryButton("Kết nối máy in") {
+            openFeatureCategory("Kết nối máy in", listOf(
+                Triple("Chẩn đoán kết nối 1 chạm", "Kiểm tra WiFi, Router, IP máy in, nắp máy và giấy", { pageDiagnostics() }),
+                Triple("Quản lý máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy", { pageManagePrinters() }),
+                Triple("Chọn giao tiếp kết nối", "Chuyển giữa LAN/WiFi, Bluetooth và USB OTG", { pageSelectConnection() }),
+                Triple("Tìm máy in LAN & đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in", { pageNetwork() })
+            ))
+        })
+        b.addView(featureCategoryButton("Thiết lập và in") {
+            openFeatureCategory("Thiết lập và in", listOf(
+                Triple("Cấu hình WiFi cho máy in", "Gửi tên WiFi và mật khẩu vào máy in", { pageWifi() }),
+                Triple("In mẫu hóa đơn & mã vạch QR", "In hóa đơn mẫu, mã vạch 1D và QR", { pagePrintReceipt() }),
+                Triple("Máy in tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...", { pagePrintLabel() }),
+                Triple("Cài đặt máy in Xprinter", "Density, Width, Beep, Alarm, Replay, Restore factory", { pagePrinterSettings() })
+            ))
+        })
+        b.addView(featureCategoryButton("Chia sẻ và tự động hóa") {
+            openFeatureCategory("Chia sẻ và tự động hóa", listOf(
+                Triple("Cầu nối in qua mạng (Print Bridge)", "Chia sẻ máy in USB/Bluetooth qua cổng 9100", { pagePrintBridge() }),
+                Triple("Tự động in từ thông báo", "Tự động in đơn Grab, ShopeeFood, ngân hàng khi có thông báo", { pageNotificationPrint() })
+            ))
+        })
+        b.addView(featureCategoryButton("Tiện ích") {
+            openFeatureCategory("Tiện ích", listOf(
+                Triple("Chấm công qua WiFi/LAN", "Đọc và chia sẻ bản ghi từ thiết bị hỗ trợ", { pageZkAttendance() }),
+                Triple("Công cụ nâng cao", "Gửi gói Hex thô, nghe UDP", { pageAdvanced() }),
+                Triple("Thông tin & thử máy", "Đọc serial, kiểm tra nắp/giấy, đổi PIN BT, in thử stress test", { pageInfoTest() }),
+                Triple("Thông tin ứng dụng & bảo mật", "Chính sách bảo mật và thông tin tác giả", { pageAbout() })
+            ))
+        })
     }
 
         mainHandler.removeCallbacks(autoRefreshRunnable)
