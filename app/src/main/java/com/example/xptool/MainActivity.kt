@@ -793,6 +793,7 @@ class MainActivity : Activity() {
         b.addView(featureCategoryButton("Kết nối máy in") {
             openFeatureCategory("Kết nối máy in", listOf(
                 Triple("Kiểm tra mạng nhanh", "Xem Wi-Fi, IP, subnet, gateway và mở công cụ dò/chẩn đoán hiện có", { pageQuickNetwork() }),
+                Triple("Tìm máy in mất tích", "Quét nhiều dải IP, thử đọc MAC bằng SNMP và đối chiếu máy đã lưu", { pageLostPrinter() }),
                 Triple("Quản lý máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy", { pageManagePrinters() }),
                 Triple("Chọn giao tiếp kết nối", "Chuyển giữa LAN/WiFi, Bluetooth và USB OTG", { pageSelectConnection() })
             ))
