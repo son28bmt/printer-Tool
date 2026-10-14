@@ -582,6 +582,11 @@ class MainActivity : Activity() {
         }
     }
 
+    internal fun openFromQuickNetwork(action: () -> Unit) {
+        pageBackStack.addLast { pageQuickNetwork() }
+        action()
+    }
+
     private fun showHome(skipAutoRefreshTrigger: Boolean = false) {
         pageBackStack.clear()
         showPage("XP Tool by QuangSonAIBAT", true) { b ->
@@ -793,6 +798,7 @@ class MainActivity : Activity() {
         b.addView(sectionTitle("Chọn tính năng để sử dụng"))
         b.addView(featureCategoryButton("Kết nối máy in") {
             openFeatureCategory("Kết nối máy in", listOf(
+                Triple("Kiểm tra mạng nhanh", "Xem Wi-Fi, IP, subnet, gateway và mở công cụ dò/chẩn đoán hiện có", { pageQuickNetwork() }),
                 Triple("Chẩn đoán kết nối 1 chạm", "Kiểm tra WiFi, Router, IP máy in, nắp máy và giấy", { pageDiagnostics() }),
                 Triple("Quản lý máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy", { pageManagePrinters() }),
                 Triple("Chọn giao tiếp kết nối", "Chuyển giữa LAN/WiFi, Bluetooth và USB OTG", { pageSelectConnection() }),
