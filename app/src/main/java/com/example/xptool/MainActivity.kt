@@ -640,7 +640,6 @@ class MainActivity : Activity() {
             emptyCard.addView(label("Tìm máy in trong mạng rồi lưu thiết bị để bắt đầu.", 13f).apply {
                 setTextColor(colorMuted)
             })
-            emptyCard.addView(btn("Tìm máy in") { pageNetwork() })
             b.addView(emptyCard)
         } else {
             val listCol = column()
@@ -790,19 +789,12 @@ class MainActivity : Activity() {
             b.addView(listCol)
         }
 
-        if (PrinterManager.savedPrinters.isNotEmpty()) {
-            b.addView(sectionTitle("Tìm máy in"))
-            b.addView(btn("Tìm máy in") { pageNetwork() })
-        }
-
         b.addView(sectionTitle("Chọn tính năng để sử dụng"))
         b.addView(featureCategoryButton("Kết nối máy in") {
             openFeatureCategory("Kết nối máy in", listOf(
                 Triple("Kiểm tra mạng nhanh", "Xem Wi-Fi, IP, subnet, gateway và mở công cụ dò/chẩn đoán hiện có", { pageQuickNetwork() }),
-                Triple("Chẩn đoán kết nối 1 chạm", "Kiểm tra WiFi, Router, IP máy in, nắp máy và giấy", { pageDiagnostics() }),
                 Triple("Quản lý máy in của tôi", "Xem danh sách, thêm theo IP, đổi tên, xóa, đổi khổ giấy", { pageManagePrinters() }),
-                Triple("Chọn giao tiếp kết nối", "Chuyển giữa LAN/WiFi, Bluetooth và USB OTG", { pageSelectConnection() }),
-                Triple("Tìm máy in LAN & đổi IP", "Dò UDP broadcast, quét dải IP 9100, lưu máy in", { pageNetwork() })
+                Triple("Chọn giao tiếp kết nối", "Chuyển giữa LAN/WiFi, Bluetooth và USB OTG", { pageSelectConnection() })
             ))
         })
         b.addView(featureCategoryButton("Thiết lập và in") {
