@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     internal var etIpCur: EditText? = null
     internal var etPortCur: EditText? = null
     private var currentPageIsHome = true
+    private val pageBackStack = java.util.ArrayDeque<() -> Unit>()
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     internal val mainHandler = Handler(Looper.getMainLooper())
@@ -164,7 +165,15 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         InfoTestPage.stopStressTest()
-        if (!currentPageIsHome) showHome() else super.onBackPressed()
+        if (!currentPageIsHome) goBack() else super.onBackPressed()
+    }
+
+    private fun goBack() {
+        if (pageBackStack.isNotEmpty()) {
+            pageBackStack.removeLast().invoke()
+        } else {
+            showHome()
+        }
     }
 
     internal fun checkBtPermission() {
@@ -413,7 +422,7 @@ class MainActivity : Activity() {
                 textSize = 28f
                 setTextColor(colorAccent)
                 layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(10) }
-                setOnClickListener { showHome() }
+                setOnClickListener { goBack() }
             })
             header.addView(label(title, 18f, true))
         }
@@ -565,12 +574,16 @@ class MainActivity : Activity() {
         showPage(title, false) { body ->
             body.addView(label("Chọn tính năng để sử dụng", 14f).apply { setTextColor(colorMuted) })
             features.forEach { (name, description, action) ->
-                body.addView(menuBtn(name, description, action))
+                body.addView(menuBtn(name, description) {
+                    pageBackStack.addLast { openFeatureCategory(title, features) }
+                    action()
+                })
             }
         }
     }
 
     private fun showHome(skipAutoRefreshTrigger: Boolean = false) {
+        pageBackStack.clear()
         showPage("XP Tool by QuangSonAIBAT", true) { b ->
         val active = PrinterManager.getActivePrinter()
         if (active != null) {
