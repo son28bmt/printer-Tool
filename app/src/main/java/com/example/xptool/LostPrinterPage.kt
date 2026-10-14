@@ -24,7 +24,7 @@ internal fun MainActivity.pageLostPrinter() {
     body.addView(communityField)
     val macScanStatus = label("")
     val macScanResults = column()
-    val macScanButton = btn("Thử dò MAC đa dải (SNMP)")
+    val macScanButton = btn("Thử dò MAC đa dải (SNMP)") {}
     var isMacScanRunning = false
     var cancelMacScan: (() -> Unit)? = null
 
