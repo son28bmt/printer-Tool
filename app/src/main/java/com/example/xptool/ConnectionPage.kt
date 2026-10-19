@@ -5,8 +5,10 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -73,30 +75,97 @@ internal fun MainActivity.pageSelectConnection() = showPage("Chọn kết nối 
         val btAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf())
         val spBt = Spinner(this).apply { adapter = btAdapter }
         val btDevices = mutableListOf<BluetoothDevice>()
+        val scanHandler = Handler(Looper.getMainLooper())
+        var activeBtAdapter: BluetoothAdapter? = null
+        var discoveryReceiver: BroadcastReceiver? = null
+        var discoveryTimeout: Runnable? = null
+
+        fun stopBtDiscovery() {
+            discoveryTimeout?.let(scanHandler::removeCallbacks)
+            discoveryTimeout = null
+            discoveryReceiver?.let { receiver ->
+                runCatching { unregisterReceiver(receiver) }
+            }
+            discoveryReceiver = null
+            runCatching { activeBtAdapter?.cancelDiscovery() }
+            activeBtAdapter = null
+        }
 
         fun refreshBt() {
+            stopBtDiscovery()
             btAdapter.clear()
             btDevices.clear()
-            checkBtPermission()
+            val needsPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
+                    checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            } else {
+                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            }
+            if (needsPermission) {
+                checkBtPermission()
+                log("Hãy cấp quyền Bluetooth/Vị trí rồi nhấn quét lại thiết bị.")
+                return
+            }
             val bta = BluetoothAdapter.getDefaultAdapter()
             if (bta == null || !bta.isEnabled) {
                 log("Bluetooth chưa được bật trên điện thoại.")
                 return
             }
-            val bonded = try { bta.bondedDevices } catch (e: Exception) { null }
-            if (bonded.isNullOrEmpty()) {
-                log("Không thấy thiết bị Bluetooth nào đã ghép đôi. Hãy ghép đôi trong Cài đặt Bluetooth.")
-            } else {
-                bonded.forEach { dev ->
-                    btDevices.add(dev)
-                    btAdapter.add("${dev.name ?: "Unknown"} [${dev.address}]")
+            activeBtAdapter = bta
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    when (intent?.action) {
+                        BluetoothDevice.ACTION_FOUND -> {
+                            @Suppress("DEPRECATION")
+                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+                            if (btDevices.none { it.address == device.address }) {
+                                btDevices.add(device)
+                                btAdapter.add("${device.name ?: "Thiết bị Bluetooth"} [${device.address}]")
+                                log("Phát hiện Bluetooth: ${device.name ?: "Không rõ tên"} [${device.address}]")
+                            }
+                        }
+                        BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                            discoveryTimeout?.let(scanHandler::removeCallbacks)
+                            discoveryTimeout = null
+                            discoveryReceiver?.let { runCatching { unregisterReceiver(it) } }
+                            discoveryReceiver = null
+                            activeBtAdapter = null
+                            log("Quét Bluetooth xong: tìm thấy ${btDevices.size} thiết bị đang phát hiện được.")
+                        }
+                    }
                 }
-                log("Đã tìm thấy ${btDevices.size} thiết bị Bluetooth đã ghép đôi.")
+            }
+            val filter = IntentFilter().apply {
+                addAction(BluetoothDevice.ACTION_FOUND)
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+            }
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(receiver, filter)
+            }
+            discoveryReceiver = receiver
+            val timeout = Runnable {
+                if (discoveryReceiver === receiver) {
+                    stopBtDiscovery()
+                    log("Đã dừng quét Bluetooth sau thời gian chờ. Tìm thấy ${btDevices.size} thiết bị.")
+                }
+            }
+            discoveryTimeout = timeout
+            scanHandler.postDelayed(timeout, 15_000L)
+            val started = runCatching { bta.startDiscovery() }.getOrDefault(false)
+            if (!started) {
+                stopBtDiscovery()
+                log("Không khởi động được quét Bluetooth. Hãy tắt/bật Bluetooth rồi thử lại.")
+            } else {
+                log("Đang quét thiết bị Bluetooth ở gần trong tối đa 15 giây. Máy in cần bật chế độ có thể tìm thấy.")
             }
         }
-        btPanel.addView(label("Chọn máy in Bluetooth đã ghép đôi:"))
+        btPanel.addView(label("Thiết bị Bluetooth đang phát hiện được ở gần:"))
+        btPanel.addView(label("Bật chế độ ghép đôi/có thể tìm thấy trên máy in. Thiết bị Bluetooth đang ẩn sẽ không xuất hiện khi quét.", 12f).apply { setTextColor(colorMuted) })
         btPanel.addView(spBt)
-        btPanel.addView(btn("Làm mới danh sách Bluetooth") { refreshBt() })
+        btPanel.addView(btn("Quét lại thiết bị Bluetooth gần đây") { refreshBt() })
 
         val usbPanel = column().apply { visibility = View.GONE }
         val usbAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf())

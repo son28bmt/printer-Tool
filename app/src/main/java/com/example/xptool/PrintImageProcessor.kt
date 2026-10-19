@@ -3,7 +3,9 @@ package com.example.xptool
 import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
@@ -16,7 +18,13 @@ import kotlin.math.roundToInt
 internal object PrintImageProcessor {
     private const val MAX_HEIGHT_PX = 4096
 
-    fun decodeImage(resolver: ContentResolver, uri: Uri, targetWidthPx: Int): Bitmap? = runCatching {
+    fun decodeImage(
+        resolver: ContentResolver,
+        uri: Uri,
+        targetWidthPx: Int,
+        targetHeightPx: Int? = null,
+        marginPx: Int = 0
+    ): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Tệp ảnh không đọc được." }
@@ -24,8 +32,7 @@ internal object PrintImageProcessor {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
             ?: error("Không mở được tệp ảnh.")
-        val resized = resize(decoded, targetWidthPx)
-        dither(resized).also { if (it !== resized) resized.recycle() }
+        fitToArea(decoded, targetWidthPx, targetHeightPx, marginPx)
     }.getOrNull()
 
     fun pdfPageCount(pfd: ParcelFileDescriptor): Int {
@@ -37,7 +44,13 @@ internal object PrintImageProcessor {
         }
     }
 
-    fun renderPdfPage(pfd: ParcelFileDescriptor, pageIndex: Int, targetWidthPx: Int): Bitmap? {
+    fun renderPdfPage(
+        pfd: ParcelFileDescriptor,
+        pageIndex: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int? = null,
+        marginPx: Int = 0
+    ): Bitmap? {
         val renderer = try {
             PdfRenderer(pfd)
         } catch (_: Exception) {
@@ -47,12 +60,28 @@ internal object PrintImageProcessor {
             if (pageIndex !in 0 until renderer.pageCount) return null
             val page = renderer.openPage(pageIndex)
             try {
-                val scale = min(targetWidthPx.toFloat() / page.width, MAX_HEIGHT_PX.toFloat() / page.height)
-                val width = max(1, (page.width * scale).roundToInt())
-                val height = max(1, (page.height * scale).roundToInt())
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val margin = marginPx.coerceAtLeast(0)
+                val availableWidth = (targetWidthPx - margin * 2).coerceAtLeast(1)
+                val availableHeight = targetHeightPx?.let { (it - margin * 2).coerceAtLeast(1) }
+                    ?: (MAX_HEIGHT_PX - margin * 2).coerceAtLeast(1)
+                val scale = min(
+                    availableWidth.toFloat() / page.width,
+                    availableHeight.toFloat() / page.height
+                )
+                val contentWidth = max(1, (page.width * scale).roundToInt())
+                val contentHeight = max(1, (page.height * scale).roundToInt())
+                val canvasHeight = targetHeightPx?.coerceAtLeast(1)
+                    ?: (contentHeight + margin * 2).coerceAtMost(MAX_HEIGHT_PX)
+                val bitmap = Bitmap.createBitmap(targetWidthPx, canvasHeight, Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, Rect(0, 0, width, height), null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                val left = ((targetWidthPx - contentWidth) / 2).coerceAtLeast(0)
+                val top = ((canvasHeight - contentHeight) / 2).coerceAtLeast(0)
+                page.render(
+                    bitmap,
+                    Rect(left, top, (left + contentWidth).coerceAtMost(targetWidthPx), (top + contentHeight).coerceAtMost(canvasHeight)),
+                    null,
+                    PdfRenderer.Page.RENDER_MODE_FOR_PRINT
+                )
                 dither(bitmap).also { bitmap.recycle() }
             } finally {
                 page.close()
@@ -67,6 +96,26 @@ internal object PrintImageProcessor {
     fun resizeAndDither(source: Bitmap, targetWidthPx: Int): Bitmap {
         val resized = resize(source, targetWidthPx)
         return dither(resized).also { if (it !== resized && resized !== source) resized.recycle() }
+    }
+
+    private fun fitToArea(source: Bitmap, targetWidthPx: Int, targetHeightPx: Int?, marginPx: Int): Bitmap {
+        val margin = marginPx.coerceAtLeast(0)
+        val contentWidth = (targetWidthPx - margin * 2).coerceAtLeast(1)
+        val contentHeightLimit = targetHeightPx?.let { (it - margin * 2).coerceAtLeast(1) }
+            ?: (MAX_HEIGHT_PX - margin * 2).coerceAtLeast(1)
+        val scale = min(contentWidth.toFloat() / source.width, contentHeightLimit.toFloat() / source.height)
+        val drawWidth = max(1, (source.width * scale).roundToInt())
+        val drawHeight = max(1, (source.height * scale).roundToInt())
+        val canvasHeight = targetHeightPx?.coerceAtLeast(1)
+            ?: (drawHeight + margin * 2).coerceAtMost(MAX_HEIGHT_PX)
+        val fitted = Bitmap.createBitmap(targetWidthPx, canvasHeight, Bitmap.Config.ARGB_8888)
+        fitted.eraseColor(Color.WHITE)
+        val canvas = Canvas(fitted)
+        val left = (targetWidthPx - drawWidth) / 2f
+        val top = (canvasHeight - drawHeight) / 2f
+        canvas.drawBitmap(source, null, android.graphics.RectF(left, top, left + drawWidth, top + drawHeight), Paint(Paint.FILTER_BITMAP_FLAG))
+        if (!source.isRecycled) source.recycle()
+        return dither(fitted).also { fitted.recycle() }
     }
 
     private fun resize(source: Bitmap, targetWidthPx: Int): Bitmap {

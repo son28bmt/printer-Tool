@@ -7,6 +7,11 @@ import android.os.ParcelFileDescriptor
 internal object PdfToPrintHelper {
     fun pdfPageCount(pfd: ParcelFileDescriptor): Int = PrintImageProcessor.pdfPageCount(pfd)
 
-    fun renderPdfPage(pfd: ParcelFileDescriptor, pageIndex: Int, targetWidthPx: Int): Bitmap? =
-        PrintImageProcessor.renderPdfPage(pfd, pageIndex, targetWidthPx)
+    fun renderPdfPage(
+        pfd: ParcelFileDescriptor,
+        pageIndex: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int? = null,
+        marginPx: Int = 0
+    ): Bitmap? = PrintImageProcessor.renderPdfPage(pfd, pageIndex, targetWidthPx, targetHeightPx, marginPx)
 }
