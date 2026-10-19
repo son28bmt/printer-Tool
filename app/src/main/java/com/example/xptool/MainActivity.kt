@@ -800,6 +800,7 @@ class MainActivity : Activity() {
         })
         b.addView(featureCategoryButton("Thiết lập và in") {
             openFeatureCategory("Thiết lập và in", listOf(
+                Triple("Thiết lập & in thử", "Chọn máy in, khổ hóa đơn hoặc kích thước tem rồi tùy chỉnh mẫu", { pagePrintSetup() }),
                 Triple("Cấu hình WiFi cho máy in", "Gửi tên WiFi và mật khẩu vào máy in", { pageWifi() }),
                 Triple("In mẫu hóa đơn & mã vạch QR", "In hóa đơn mẫu, mã vạch 1D và QR", { pagePrintReceipt() }),
                 Triple("Máy in tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...", { pagePrintLabel() }),
