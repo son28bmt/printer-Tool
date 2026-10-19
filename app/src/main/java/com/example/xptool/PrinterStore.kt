@@ -220,10 +220,16 @@ object PrinterStore {
     fun saveOrUpdate(p: SavedPrinter) {
         synchronized(printers) {
             val idx = printers.indexOfFirst { existing ->
-                if (!p.mac.isNullOrBlank() && !existing.mac.isNullOrBlank()) {
-                    existing.mac.equals(p.mac, ignoreCase = true)
-                } else {
-                    existing.lastIp == p.lastIp && existing.port == p.port
+                when (p.connType) {
+                    POSConnect.DEVICE_TYPE_BLUETOOTH -> existing.connType == POSConnect.DEVICE_TYPE_BLUETOOTH &&
+                        existing.btMac.equals(p.btMac, ignoreCase = true)
+                    POSConnect.DEVICE_TYPE_USB -> existing.connType == POSConnect.DEVICE_TYPE_USB &&
+                        existing.usbPath == p.usbPath
+                    else -> existing.connType == p.connType && if (!p.mac.isNullOrBlank() && !existing.mac.isNullOrBlank()) {
+                        existing.mac.equals(p.mac, ignoreCase = true)
+                    } else {
+                        existing.lastIp == p.lastIp && existing.port == p.port
+                    }
                 }
             }
             if (idx >= 0) {

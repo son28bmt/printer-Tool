@@ -9,6 +9,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.text.InputType
+import net.posprinter.POSConnect
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.Locale
 import kotlin.concurrent.thread
@@ -46,6 +47,30 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
 
     body.addView(label("Chọn PDF hoặc ảnh rồi xem trước trước khi in. Nội dung sẽ được chuyển sang đen trắng.", 14f))
     body.addView(label("Chọn khổ giấy trước khi mở tệp. Nội dung sẽ tự thu phóng, căn giữa và giữ nguyên tỉ lệ; kích thước dot chỉ là ước lượng theo máy in.", 12f).apply { setTextColor(colorMuted) })
+    val savedPrinters = PrinterStore.printers.toList()
+    fun printerDescription(printer: SavedPrinter): String {
+        val transport = when (printer.connType) {
+            POSConnect.DEVICE_TYPE_BLUETOOTH -> "Bluetooth ${printer.btMac.ifBlank { printer.mac.orEmpty() }}"
+            POSConnect.DEVICE_TYPE_USB -> "USB ${printer.usbPath}"
+            else -> "${printer.lastIp}:${printer.port}"
+        }
+        return "${printer.name} · $transport"
+    }
+    val printerPicker = Spinner(this).apply {
+        adapter = ArrayAdapter(
+            this@pagePrintFiles,
+            android.R.layout.simple_spinner_dropdown_item,
+            savedPrinters.map { printerDescription(it) }
+        )
+        setSelection(savedPrinters.indexOfFirst { it.id == PrinterStore.activePrinterKey }.coerceAtLeast(0))
+        visibility = if (savedPrinters.isEmpty()) View.GONE else View.VISIBLE
+    }
+    body.addView(label("Máy in", 14f, true))
+    body.addView(printerPicker)
+    if (savedPrinters.isEmpty()) {
+        body.addView(label("Chưa có máy in đã lưu. Hãy chọn giao tiếp và lưu máy in trước khi in tệp.", 12f).apply { setTextColor(colorMuted) })
+        body.addView(btn("Kết nối / lưu máy in") { pageSelectConnection() })
+    }
     val selectedFile = label(uri?.lastPathSegment ?: "Chưa chọn tệp", 13f)
     val areaPicker = Spinner(this).apply {
         adapter = ArrayAdapter(this@pagePrintFiles, android.R.layout.simple_spinner_dropdown_item, printAreaOptions)
@@ -180,6 +205,10 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
         val fileUri = uri ?: return@setOnClickListener log("Hãy chọn tệp trước.")
         if (isPdf && pageCount == 0) return@setOnClickListener log("PDF chưa đọc được nên chưa thể in.")
         if (!isPdf && !resolvedType.startsWith("image/")) return@setOnClickListener log("Định dạng chưa hỗ trợ.")
+        val selectedPrinter = savedPrinters.getOrNull(printerPicker.selectedItemPosition)
+            ?: return@setOnClickListener log("Hãy kết nối và lưu máy in trước khi in tệp.")
+        PrinterManager.setActivePrinter(this@pagePrintFiles, selectedPrinter.id)
+        applySavedPrinter(selectedPrinter)
         val area = selectedArea()
         val selectedPage = pagePicker.selectedItemPosition
         val pages = if (isPdf && selectedPage == pageCount) (0 until pageCount).toList() else listOf(selectedPage.coerceAtLeast(0))

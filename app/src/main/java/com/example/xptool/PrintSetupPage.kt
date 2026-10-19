@@ -44,7 +44,8 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     val printers = PrinterManager.savedPrinters.toList()
     if (printers.isEmpty()) {
         body.addView(label("Chưa có máy in trong danh sách. Hãy dò mạng và lưu máy in trước."))
-        body.addView(btn("Tìm máy in") { pageNetwork() })
+        body.addView(btn("Chọn kết nối Bluetooth / USB / IP") { pageSelectConnection() })
+        body.addView(btn("Dò máy in qua Wi-Fi") { pageNetwork() })
         return@showPage
     }
 

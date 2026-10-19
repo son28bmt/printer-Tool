@@ -130,6 +130,28 @@ class MainActivity : Activity() {
             connectType = prefs.getInt("connType", POSConnect.DEVICE_TYPE_ETHERNET)
         }
 
+        // Migrate the previously selected Bluetooth printer from legacy app preferences
+        // into the persistent printer list so it remains selectable after restarting.
+        val legacyPrefs = getSharedPreferences("xp", MODE_PRIVATE)
+        val legacyBtMac = legacyPrefs.getString("btMac", "").orEmpty().trim()
+        if (legacyPrefs.getInt("connType", POSConnect.DEVICE_TYPE_ETHERNET) == POSConnect.DEVICE_TYPE_BLUETOOTH &&
+            legacyBtMac.isNotEmpty() &&
+            PrinterStore.printers.none { it.connectType == POSConnect.DEVICE_TYPE_BLUETOOTH && it.btMac.equals(legacyBtMac, true) }
+        ) {
+            val legacyPrinter = SavedPrinter(
+                name = "Máy in Bluetooth ${legacyBtMac.takeLast(5)}",
+                mac = legacyBtMac,
+                lastIp = legacyPrefs.getString("ip", printerIp) ?: printerIp,
+                port = legacyPrefs.getInt("port", printerPort),
+                connType = POSConnect.DEVICE_TYPE_BLUETOOTH,
+                paperWidth = paperWidth,
+                btMac = legacyBtMac
+            )
+            PrinterStore.saveOrUpdate(legacyPrinter)
+            PrinterStore.setActivePrinter(legacyPrinter.id)
+            applySavedPrinter(legacyPrinter)
+        }
+
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             multicastLock = wm.createMulticastLock("xptool").apply {

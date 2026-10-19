@@ -220,8 +220,20 @@ internal fun MainActivity.pageSelectConnection() = showPage("Chọn kết nối 
                         ?: return@btn log("Chưa chọn thiết bị Bluetooth")
                     connectType = POSConnect.DEVICE_TYPE_BLUETOOTH
                     btMac = dev.address
+                    val saved = SavedPrinter(
+                        name = dev.name?.takeIf { it.isNotBlank() } ?: "Máy in Bluetooth ${dev.address.takeLast(5)}",
+                        mac = dev.address,
+                        lastIp = printerIp,
+                        port = printerPort,
+                        connType = POSConnect.DEVICE_TYPE_BLUETOOTH,
+                        paperWidth = paperWidth,
+                        btMac = dev.address
+                    )
+                    PrinterStore.saveOrUpdate(saved)
+                    PrinterStore.setActivePrinter(saved.id)
+                    applySavedPrinter(saved)
                     savePrinter()
-                    log("Đã chọn máy in Bluetooth: ${dev.name} [$btMac]")
+                    log("Đã lưu và chọn máy in Bluetooth: ${saved.name} [$btMac]")
                 }
                 rbUsb.id -> {
                     val path = usbNames.getOrNull(spUsb.selectedItemPosition)
