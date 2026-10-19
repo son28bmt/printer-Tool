@@ -10,10 +10,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Bitmap
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.Typeface
 import android.net.wifi.WifiManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -71,6 +73,9 @@ class MainActivity : Activity() {
     internal var etPortCur: EditText? = null
     private var currentPageIsHome = true
     private val pageBackStack = java.util.ArrayDeque<() -> Unit>()
+    private val printFileRequestCode = 4201
+    private val logoPickerRequestCode = 4202
+    private var logoPickerCallback: ((Uri?) -> Unit)? = null
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     internal val mainHandler = Handler(Looper.getMainLooper())
@@ -136,7 +141,57 @@ class MainActivity : Activity() {
 
         checkBtPermission()
         log("XP Tool sẵn sàng. Hỗ trợ LAN/WiFi, Bluetooth và USB OTG.")
-        showHome()
+        val sharedFile = sharedPrintFile(intent)
+        if (sharedFile != null) pagePrintFiles(sharedFile.first, sharedFile.second) else showHome()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sharedPrintFile(source: Intent?): Pair<Uri, String?>? {
+        if (source?.action != Intent.ACTION_SEND) return null
+        val uri = if (Build.VERSION.SDK_INT >= 33) {
+            source.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            source.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+        } ?: source.data ?: return null
+        return uri to source.type
+    }
+
+    internal fun choosePrintDocument(mimeType: String) {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(picker, printFileRequestCode)
+    }
+
+    internal fun choosePrintLogo(onPicked: (Uri?) -> Unit) {
+        logoPickerCallback = onPicked
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(picker, logoPickerRequestCode)
+    }
+
+    @Deprecated("Legacy result callback is retained for the project's Activity-based UI")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == printFileRequestCode && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            pagePrintFiles(uri, data.type ?: contentResolver.getType(uri))
+        } else if (requestCode == logoPickerRequestCode) {
+            val callback = logoPickerCallback
+            logoPickerCallback = null
+            val uri = if (resultCode == RESULT_OK) data?.data else null
+            if (uri != null && data != null) {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri, data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+            callback?.invoke(uri)
+        }
     }
 
     override fun onResume() {
@@ -801,6 +856,7 @@ class MainActivity : Activity() {
         b.addView(featureCategoryButton("Thiết lập và in") {
             openFeatureCategory("Thiết lập và in", listOf(
                 Triple("Thiết lập & in thử", "Chọn máy in, khổ hóa đơn hoặc kích thước tem rồi tùy chỉnh mẫu", { pagePrintSetup() }),
+                Triple("In PDF / ảnh", "Mở phiếu giao hàng hoặc ảnh đơn hàng để xem trước và in", { pagePrintFiles() }),
                 Triple("Cấu hình WiFi cho máy in", "Gửi tên WiFi và mật khẩu vào máy in", { pageWifi() }),
                 Triple("In mẫu hóa đơn & mã vạch QR", "In hóa đơn mẫu, mã vạch 1D và QR", { pagePrintReceipt() }),
                 Triple("Máy in tem nhãn (TSPL)", "Dành cho máy in tem XP-350B, 365B, 420B...", { pagePrintLabel() }),
@@ -1210,6 +1266,95 @@ class MainActivity : Activity() {
                     } else {
                         log("❌ Gửi [$label] qua ${connTypeName()} thất bại sau $attempts lần thử.")
                     }
+                }
+            }
+        )
+    }
+
+    internal fun sendPrintBitmap(label: String, bitmap: Bitmap, widthPx: Int) {
+        val queuedBitmap = try {
+            bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        } catch (_: Exception) {
+            null
+        }
+        if (queuedBitmap == null) {
+            log("Không đủ bộ nhớ để xếp ảnh [$label] vào hàng đợi.")
+            return
+        }
+        val active = PrinterStore.getActivePrinter()
+        val type = active?.connectType ?: connectType
+        val targetInfo = when (type) {
+            POSConnect.DEVICE_TYPE_BLUETOOTH -> active?.btMac ?: btMac
+            POSConnect.DEVICE_TYPE_USB -> active?.usbPath ?: usbPath
+            else -> active?.lastIp ?: targetIp()
+        }
+        val key = when (type) {
+            POSConnect.DEVICE_TYPE_BLUETOOTH -> "bt:$targetInfo"
+            POSConnect.DEVICE_TYPE_USB -> "usb:$targetInfo"
+            else -> active?.id ?: "manual:$targetInfo:${active?.port ?: targetPort()}"
+        }
+        log("Đưa ảnh [$label] vào hàng đợi SDK...")
+        PrintQueue.enqueue(
+            printerKey = key,
+            job = {
+                val resolvedTarget = if (type == POSConnect.DEVICE_TYPE_ETHERNET && active != null) {
+                    PrinterStore.resolvePrinterSync(active) { message -> log(message) } ?: return@enqueue false
+                } else targetInfo
+                val session = SdkSession(applicationContext)
+                val done = java.util.concurrent.CountDownLatch(1)
+                val succeeded = java.util.concurrent.atomic.AtomicBoolean(false)
+                session.open(type, resolvedTarget, 8000) { connected, conn, message ->
+                    if (!connected || conn == null) {
+                        log("Không kết nối được để in ảnh: $message")
+                        if (!queuedBitmap.isRecycled) queuedBitmap.recycle()
+                        done.countDown()
+                    } else {
+                        thread(name = "xp-bitmap-print") {
+                            try {
+                                val printer = POSPrinter(conn)
+                                val bitmapMethod = printer.javaClass.methods.firstOrNull { method ->
+                                    method.name == "printBitmap" && method.parameterTypes.firstOrNull() == Bitmap::class.java &&
+                                        method.parameterCount in 3..4
+                                } ?: error("SDK này không công bố POSPrinter.printBitmap(Bitmap, ...)")
+                                val alignment = POSConst::class.java.getField("ALIGNMENT_CENTER").getInt(null)
+                                val model = POSConst::class.java.getField("BMP_NORMAL").getInt(null)
+                                val args = if (bitmapMethod.parameterCount == 3) {
+                                    arrayOf(queuedBitmap, alignment, widthPx)
+                                } else {
+                                    arrayOf(queuedBitmap, alignment, widthPx, model)
+                                }
+                                val result = bitmapMethod.invoke(printer, *args)
+                                if (bitmapMethod.returnType != Void.TYPE) {
+                                    val printTarget = result ?: printer
+                                    val printMethod = printTarget.javaClass.methods.firstOrNull {
+                                        it.name == "print" && it.parameterCount == 0
+                                    } ?: error("SDK không có lệnh print() để gửi ảnh")
+                                    printMethod.invoke(printTarget)
+                                }
+                                Thread.sleep(1200)
+                                succeeded.set(true)
+                            } catch (e: Exception) {
+                                log("SDK không in được ảnh: ${e.cause?.message ?: e.message}")
+                            } finally {
+                                session.close()
+                                if (!queuedBitmap.isRecycled) queuedBitmap.recycle()
+                                done.countDown()
+                            }
+                        }
+                    }
+                }
+                val finished = done.await(30, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) {
+                    session.close()
+                    log("In ảnh hết thời gian chờ.")
+                }
+                succeeded.get()
+            },
+            maxRetry = 0,
+            retryDelaysMs = emptyList(),
+            onResult = { success, _ ->
+                runOnUiThread {
+                    log(if (success) "Đã gửi ảnh [$label] tới máy in." else "Gửi ảnh [$label] thất bại.")
                 }
             }
         )

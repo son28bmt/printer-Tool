@@ -1,12 +1,15 @@
 package com.example.xptool
 
+import android.app.AlertDialog
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
@@ -16,6 +19,7 @@ import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.concurrent.thread
 
 private data class PrintSetupOrderItem(
     val name: String,
@@ -50,6 +54,26 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         adapter = ArrayAdapter(this@pagePrintSetup, android.R.layout.simple_spinner_dropdown_item, names)
         setSelection(printers.indexOfFirst { it.id == PrinterManager.activePrinterId }.coerceAtLeast(0))
     }
+    val templatePicker = Spinner(this).apply {
+        adapter = ArrayAdapter(this@pagePrintSetup, android.R.layout.simple_spinner_dropdown_item, emptyList<String>())
+    }
+    val templateSetState = arrayOfNulls<PrintSetupTemplateSet>(1)
+
+    fun selectedTemplate(printer: SavedPrinter): PrintSetupTemplate? {
+        val set = templateSetState[0] ?: return null
+        return set.templates.getOrNull(templatePicker.selectedItemPosition)
+    }
+
+    fun refreshTemplates(printer: SavedPrinter, preferredId: String? = null) {
+        val set = PrintSetupTemplateStore.load(savedTemplates, printer.id, printer.paperWidth)
+        templateSetState[0] = set
+        val desired = preferredId ?: set.selectedId
+        val selectedIndex = set.templates.indexOfFirst { it.id == desired }.coerceAtLeast(0)
+        set.selectedId = set.templates[selectedIndex].id
+        templatePicker.adapter = ArrayAdapter(this@pagePrintSetup, android.R.layout.simple_spinner_dropdown_item, set.templates.map { it.name })
+        templatePicker.setSelection(selectedIndex)
+        PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
+    }
     val kindPicker = spinner(listOf("Hóa đơn", "Tem nhãn"))
     val billWidthPicker = spinner(listOf("K58 · 58 mm", "K80 · 80 mm"))
     val labelSizePicker = spinner(listOf("40 × 30 mm", "30 × 40 mm", "50 × 30 mm", "60 × 40 mm", "100 × 150 mm"))
@@ -61,6 +85,64 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     val selectionPanel = column()
     selectionPanel.addView(label("1. Chọn máy in", 15f, true))
     selectionPanel.addView(printerPicker)
+    selectionPanel.addView(label("Mẫu thiết kế", 15f, true))
+    selectionPanel.addView(templatePicker)
+    selectionPanel.addView(row(
+        btn("+ Thêm mẫu") {
+            val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@btn
+            val set = templateSetState[0] ?: return@btn
+            val nameInput = edit("Tên mẫu", "Mẫu ${set.templates.size + 1}")
+            AlertDialog.Builder(this@pagePrintSetup)
+                .setTitle("Thêm mẫu in")
+                .setView(nameInput)
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Thêm") { _, _ ->
+                    val name = nameInput.text.toString().trim().ifBlank { "Mẫu ${set.templates.size + 1}" }
+                    val source = selectedTemplate(printer) ?: set.templates.first()
+                    val added = PrintSetupTemplateStore.newTemplate(name, source)
+                    set.templates += added
+                    set.selectedId = added.id
+                    PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
+                    refreshTemplates(printer, added.id)
+                }
+                .show()
+        } to 1f,
+        btn("Đổi tên") {
+            val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@btn
+            val template = selectedTemplate(printer) ?: return@btn
+            val nameInput = edit("Tên mẫu", template.name)
+            AlertDialog.Builder(this@pagePrintSetup)
+                .setTitle("Đổi tên mẫu")
+                .setView(nameInput)
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Lưu") { _, _ ->
+                    template.name = nameInput.text.toString().trim().ifBlank { template.name }
+                    templateSetState[0]?.let { PrintSetupTemplateStore.save(savedTemplates, printer.id, it) }
+                    refreshTemplates(printer, template.id)
+                }
+                .show()
+        } to 1f,
+        btn("Xóa") {
+            val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@btn
+            val set = templateSetState[0] ?: return@btn
+            if (set.templates.size <= 1) {
+                log("Cần giữ ít nhất một mẫu in.")
+                return@btn
+            }
+            val template = selectedTemplate(printer) ?: return@btn
+            AlertDialog.Builder(this@pagePrintSetup)
+                .setTitle("Xóa mẫu ${template.name}?")
+                .setMessage("Cấu hình và logo của mẫu này sẽ bị xóa.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Xóa") { _, _ ->
+                    set.templates.removeAll { it.id == template.id }
+                    set.selectedId = set.templates.first().id
+                    PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
+                    refreshTemplates(printer, set.selectedId)
+                }
+                .show()
+        } to 1f
+    ))
     selectionPanel.addView(label("2. Chọn loại in", 15f, true))
     selectionPanel.addView(label("Khi in thử, máy đã chọn sẽ trở thành máy in đang dùng trong app.", 12f).apply { setTextColor(colorMuted) })
     selectionPanel.addView(kindPicker)
@@ -77,9 +159,16 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     }
     kindPicker.setSelection(0)
     kindPicker.onItemSelectedListener = spinnerListener { updateTypeChoices() }
+    templatePicker.onItemSelectedListener = spinnerListener {
+        val set = templateSetState[0] ?: return@spinnerListener
+        set.templates.getOrNull(templatePicker.selectedItemPosition)?.let { set.selectedId = it.id }
+        val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@spinnerListener
+        PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
+    }
     printerPicker.onItemSelectedListener = spinnerListener {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@spinnerListener
-        val config = runCatching { JSONObject(savedTemplates.getString(printer.id, "{}") ?: "{}") }.getOrDefault(JSONObject())
+        refreshTemplates(printer)
+        val config = selectedTemplate(printer)?.config ?: JSONObject()
         billWidthPicker.setSelection(if (config.optInt("paperWidth", printer.paperWidth) >= 80) 1 else 0)
         kindPicker.setSelection(config.optInt("kind", 0).coerceIn(0, 1))
         labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
@@ -89,7 +178,8 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     printerPicker.post {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition)
         if (printer != null) {
-            val config = runCatching { JSONObject(savedTemplates.getString(printer.id, "{}") ?: "{}") }.getOrDefault(JSONObject())
+            refreshTemplates(printer)
+            val config = selectedTemplate(printer)?.config ?: JSONObject()
             billWidthPicker.setSelection(if (config.optInt("paperWidth", printer.paperWidth) >= 80) 1 else 0)
             kindPicker.setSelection(config.optInt("kind", 0).coerceIn(0, 1))
             labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
@@ -103,7 +193,7 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
 
     val designConfig = column()
     designConfig.addView(label("3. Thiết lập nội dung", 15f, true))
-    designConfig.addView(label("Thông tin được lưu riêng theo máy in đã chọn.", 12f).apply { setTextColor(colorMuted) })
+    designConfig.addView(label("Thông tin được lưu trong mẫu đang chọn của máy in.", 12f).apply { setTextColor(colorMuted) })
     val shopName = edit("Tên cửa hàng", "CỬA HÀNG")
     val shopPhone = edit("Số điện thoại", "0900 000 000", InputType.TYPE_CLASS_PHONE)
     val shopAddress = edit("Địa chỉ", "Địa chỉ cửa hàng")
@@ -111,6 +201,50 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     val footer = edit("Lời nhắn cuối hóa đơn", "Cảm ơn quý khách!")
     val billFields = column()
     listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach { billFields.addView(it) }
+    val logoUri = arrayOfNulls<Uri>(1)
+    val logoStatus = label("Chưa chọn logo", 12f).apply { setTextColor(colorMuted) }
+    val logoPreview = ImageView(this).apply {
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        adjustViewBounds = true
+        maxHeight = dp(120)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(120))
+        styleCard(this)
+    }
+    fun showLogo(uri: Uri?) {
+        logoUri[0] = uri
+        if (uri == null) {
+            logoPreview.setImageDrawable(null)
+            logoStatus.text = "Chưa chọn logo"
+            return
+        }
+        logoStatus.text = "Đang tải logo…"
+        val target = if (billWidthPicker.selectedItemPosition == 1) 576 else 384
+        thread(name = "xp-logo-preview") {
+            val bitmap = PrintImageProcessor.decodeImage(contentResolver, uri, target)
+            runOnUiThread {
+                logoPreview.setImageBitmap(bitmap)
+                logoStatus.text = if (bitmap == null) "Không đọc được logo. Chọn ảnh PNG hoặc JPG khác." else "Logo đã co về khoảng $target dot, không lưu vào bộ nhớ NV của máy in."
+            }
+        }
+    }
+    billFields.addView(label("Logo cửa hàng", 14f, true))
+    billFields.addView(row(
+        btn("Chọn logo") { choosePrintLogo { picked -> if (picked != null) showLogo(picked) } } to 1f,
+        btn("Bỏ logo") { showLogo(null) } to 1f
+    ))
+    billFields.addView(btn("In thử logo") {
+        val uri = logoUri[0] ?: return@btn log("Hãy chọn logo trước.")
+        val target = if (billWidthPicker.selectedItemPosition == 1) 576 else 384
+        thread(name = "xp-logo-print") {
+            val bitmap = PrintImageProcessor.decodeImage(contentResolver, uri, target)
+            if (bitmap == null) log("Không đọc được logo để in.") else {
+                sendPrintBitmap("Logo cửa hàng", bitmap, target)
+                bitmap.recycle()
+            }
+        }
+    })
+    billFields.addView(logoStatus)
+    billFields.addView(logoPreview)
 
     val productEditors = mutableListOf<PrintSetupProductEditor>()
     val productRows = column()
@@ -256,7 +390,12 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         override fun afterTextChanged(s: Editable?) = Unit
     }
     listOf(shopName, shopPhone, shopAddress, documentTitle, footer, labelTitle, labelNote, labelCode).forEach { it.addTextChangedListener(watcher) }
-    listOf(billWidthPicker, labelSizePicker, labelTypePicker).forEach { it.onItemSelectedListener = spinnerListener { refreshPreview() } }
+    listOf(billWidthPicker, labelSizePicker, labelTypePicker).forEach { picker ->
+        picker.onItemSelectedListener = spinnerListener {
+            if (picker === billWidthPicker && logoUri[0] != null) showLogo(logoUri[0])
+            refreshPreview()
+        }
+    }
     kindPicker.onItemSelectedListener = spinnerListener {
         updateTypeChoices()
         labelFields.visibility = if (kindPicker.selectedItemPosition == 1) View.VISIBLE else View.GONE
@@ -265,8 +404,8 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         refreshPreview()
     }
 
-    fun loadConfig(printer: SavedPrinter) {
-        val config = runCatching { JSONObject(savedTemplates.getString(printer.id, "{}") ?: "{}") }.getOrDefault(JSONObject())
+    fun loadConfig(printer: SavedPrinter, template: PrintSetupTemplate) {
+        val config = template.config
         shopName.setText(config.optString("shopName", "CỬA HÀNG"))
         shopPhone.setText(config.optString("shopPhone", "0900 000 000"))
         shopAddress.setText(config.optString("shopAddress", "Địa chỉ cửa hàng"))
@@ -275,6 +414,8 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         labelTitle.setText(config.optString("labelTitle", "SẢN PHẨM MẪU"))
         labelNote.setText(config.optString("labelNote", "Giá: 35.000đ"))
         labelCode.setText(config.optString("labelCode", "SP-001"))
+        val savedLogo = config.optString("logoUri", "").takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        showLogo(savedLogo)
         kindPicker.setSelection(config.optInt("kind", 0).coerceIn(0, 1))
         billWidthPicker.setSelection(if (config.optInt("paperWidth", printer.paperWidth) >= 80) 1 else 0)
         labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
@@ -294,11 +435,16 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
             .put("labelTitle", labelTitle.text.toString())
             .put("labelNote", labelNote.text.toString())
             .put("labelCode", labelCode.text.toString())
+            .put("logoUri", logoUri[0]?.toString() ?: "")
             .put("kind", kindPicker.selectedItemPosition)
             .put("paperWidth", if (billWidthPicker.selectedItemPosition == 1) 80 else 58)
             .put("labelSize", labelSizePicker.selectedItemPosition)
             .put("labelType", labelTypePicker.selectedItemPosition)
-        savedTemplates.edit().putString(printer.id, config.toString()).apply()
+        val set = templateSetState[0] ?: return
+        val selected = set.templates.firstOrNull { it.id == selectedTemplate(printer)?.id } ?: return
+        selected.config = JSONObject(config.toString())
+        set.selectedId = selected.id
+        PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
         if (kindPicker.selectedItemPosition == 0) {
             printer.paperWidth = if (billWidthPicker.selectedItemPosition == 1) 80 else 58
             PrinterStore.saveOrUpdate(printer)
@@ -349,7 +495,23 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
                 removeAccents = ::removeAccents
             )
         }
-        sendPrintData(if (isBill) "In hóa đơn K${printer.paperWidth}" else "In thử tem TSPL", data)
+        val printLabel = if (isBill) "In hóa đơn K${printer.paperWidth}" else "In thử tem TSPL"
+        val currentLogo = if (isBill) logoUri[0] else null
+        if (currentLogo == null) {
+            sendPrintData(printLabel, data)
+        } else {
+            val imageWidth = if (billWidthPicker.selectedItemPosition == 1) 576 else 384
+            thread(name = "xp-invoice-with-logo") {
+                val bitmap = PrintImageProcessor.decodeImage(contentResolver, currentLogo, imageWidth)
+                if (bitmap != null) {
+                    sendPrintBitmap("Logo trước hóa đơn", bitmap, imageWidth)
+                    bitmap.recycle()
+                } else {
+                    log("Không đọc được logo; hóa đơn vẫn được xếp in không logo.")
+                }
+                sendPrintData(printLabel, data)
+            }
+        }
     }
     updatePrintButtonLabel = {
         printButton.text = if (kindPicker.selectedItemPosition == 0) "In hóa đơn này" else "In thử tem"
@@ -358,14 +520,15 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     designConfig.addView(row(saveButton to 1f, printButton to 1f))
     setupPanel.addView(designConfig)
 
-    val continueButton = btn("Tiếp theo: thiết kế mẫu") {}
+    val continueButton = btn("Sửa / thiết lập mẫu") {}
     continueButton.setOnClickListener {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@setOnClickListener
         val chosenKind = kindPicker.selectedItemPosition
         val chosenBillWidth = billWidthPicker.selectedItemPosition
         val chosenLabelSize = labelSizePicker.selectedItemPosition
         val chosenLabelType = labelTypePicker.selectedItemPosition
-        loadConfig(printer)
+        val template = selectedTemplate(printer) ?: return@setOnClickListener
+        loadConfig(printer, template)
         kindPicker.setSelection(chosenKind)
         billWidthPicker.setSelection(chosenBillWidth)
         labelSizePicker.setSelection(chosenLabelSize)
@@ -380,6 +543,7 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     }
     body.addView(continueButton)
     setupPanel.addView(btn("Quay lại chọn máy in / khổ giấy") {
+        printers.getOrNull(printerPicker.selectedItemPosition)?.let { saveConfig(it) }
         setupPanel.visibility = View.GONE
         selectionPanel.visibility = View.VISIBLE
         continueButton.visibility = View.VISIBLE
