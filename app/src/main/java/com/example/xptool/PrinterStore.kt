@@ -36,6 +36,9 @@ data class SavedPrinter(
     var lastSeenEpochMs: Long = System.currentTimeMillis(),
     var lastStatus: String = "unknown", // "online" | "offline" | "unknown"
     var paperWidth: Int = 58,
+    var printKind: Int = -1, // -1 = chưa gán, 0 = bill, 1 = tem
+    var labelSize: Int = 0,
+    var labelType: Int = 0,
     var btMac: String = "",
     var usbPath: String = ""
 ) {
@@ -79,6 +82,9 @@ data class SavedPrinter(
         put("lastSeenEpochMs", lastSeenEpochMs)
         put("lastStatus", lastStatus)
         put("paperWidth", paperWidth)
+        put("printKind", printKind)
+        put("labelSize", labelSize)
+        put("labelType", labelType)
         put("btMac", btMac)
         put("usbPath", usbPath)
         // Key phụ trợ tương thích ngược
@@ -98,6 +104,9 @@ data class SavedPrinter(
             val lastSeenVal = json.optLong("lastSeenEpochMs", json.optLong("lastSeen", System.currentTimeMillis()))
             val lastStatusVal = json.optString("lastStatus", "unknown")
             val paperWidthVal = json.optInt("paperWidth", 58)
+            val printKindVal = json.optInt("printKind", -1).coerceIn(-1, 1)
+            val labelSizeVal = json.optInt("labelSize", 0).coerceIn(0, 4)
+            val labelTypeVal = json.optInt("labelType", 0).coerceIn(0, 1)
             val btMacVal = json.optString("btMac", "")
             val usbPathVal = json.optString("usbPath", "")
 
@@ -110,6 +119,9 @@ data class SavedPrinter(
                 lastSeenEpochMs = lastSeenVal,
                 lastStatus = lastStatusVal,
                 paperWidth = paperWidthVal,
+                printKind = printKindVal,
+                labelSize = labelSizeVal,
+                labelType = labelTypeVal,
                 btMac = btMacVal,
                 usbPath = usbPathVal
             )
@@ -233,6 +245,15 @@ object PrinterStore {
                 }
             }
             if (idx >= 0) {
+                val existing = printers[idx]
+                // A rediscovery/connection save has no print assignment of its own; keep the
+                // settings the user attached to this saved device.
+                if (p.printKind < 0) {
+                    p.printKind = existing.printKind
+                    p.labelSize = existing.labelSize
+                    p.labelType = existing.labelType
+                    if (p.paperWidth == 58) p.paperWidth = existing.paperWidth
+                }
                 printers[idx] = p
             } else {
                 printers.add(p)

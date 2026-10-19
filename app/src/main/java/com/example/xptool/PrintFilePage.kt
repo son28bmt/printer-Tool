@@ -13,6 +13,7 @@ import net.posprinter.POSConnect
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private data class PrintArea(
@@ -125,13 +126,10 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
     body.addView(info)
     val preview = ImageView(this).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
-        adjustViewBounds = true
-        minimumHeight = dp(240)
-        maxHeight = dp(420)
-        setPadding(dp(8), dp(8), dp(8), dp(8))
+        adjustViewBounds = false
         layoutParams = android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(360)
+            dp(180)
         )
         styleCard(this)
     }
@@ -165,6 +163,20 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
         return PrintArea(width, height, margin, sizeLabel, marginMm)
     }
 
+    fun resizePreviewBox(contentWidthPx: Int, contentHeightPx: Int) {
+        val maxWidthPx = min(dp(340), (resources.displayMetrics.widthPixels - dp(48)).coerceAtLeast(dp(180)))
+        val maxHeightPx = dp(480)
+        val scale = min(maxWidthPx.toFloat() / contentWidthPx.coerceAtLeast(1), maxHeightPx.toFloat() / contentHeightPx.coerceAtLeast(1))
+        // Keep the physical media ratio exactly; don't apply independent minimums to width/height.
+        val width = (contentWidthPx * scale).roundToInt().coerceAtLeast(1)
+        val height = (contentHeightPx * scale).roundToInt().coerceAtLeast(1)
+        preview.layoutParams = LinearLayout.LayoutParams(width, height).apply {
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            topMargin = dp(8)
+            bottomMargin = dp(8)
+        }
+    }
+
     fun renderPage(fileUri: Uri, pageIndex: Int, area: PrintArea): Bitmap? = try {
         if (isPdf) {
             contentResolver.openFileDescriptor(fileUri, "r")?.use { PdfToPrintHelper.renderPdfPage(it, pageIndex, area.widthPx, area.heightPx, area.marginPx) }
@@ -193,6 +205,7 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
                 }
                 val oldBitmap = shownBitmap
                 shownBitmap = bitmap
+                if (bitmap != null) resizePreviewBox(bitmap.width, bitmap.height)
                 preview.setImageBitmap(bitmap)
                 if (oldBitmap != null && oldBitmap !== bitmap && !oldBitmap.isRecycled) oldBitmap.recycle()
                 info.text = if (bitmap == null) "Không dựng được xem trước. Kiểm tra tệp rồi thử lại." else "Khổ chọn: ${area.sizeLabel} · raster ${area.widthPx} × ${bitmap.height} dot (ước lượng 203 dpi), lề ${formatPrintMillimeters(area.marginMm)} mm."
@@ -242,16 +255,26 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
         override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
         override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
             customArea.visibility = if (position == 5) View.VISIBLE else View.GONE
+            val area = selectedArea()
+            resizePreviewBox(area.widthPx, area.heightPx ?: (area.widthPx * 3 / 2))
             refreshPreview()
         }
     }
     val customWatcher = object : android.text.TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { if (areaPicker.selectedItemPosition == 5) refreshPreview() }
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+            if (areaPicker.selectedItemPosition == 5) {
+                val area = selectedArea()
+                resizePreviewBox(area.widthPx, area.heightPx ?: (area.widthPx * 3 / 2))
+                refreshPreview()
+            }
+        }
         override fun afterTextChanged(s: android.text.Editable?) = Unit
     }
     customWidth.addTextChangedListener(customWatcher)
     customHeight.addTextChangedListener(customWatcher)
     customMargin.addTextChangedListener(customWatcher)
+    val initialArea = selectedArea()
+    resizePreviewBox(initialArea.widthPx, initialArea.heightPx ?: (initialArea.widthPx * 3 / 2))
     if (uri != null && (isPdf && pageCount > 0 || !isPdf && resolvedType.startsWith("image/"))) refreshPreview()
 }

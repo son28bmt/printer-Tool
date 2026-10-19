@@ -150,15 +150,22 @@ object ManagePrintersPage {
             card.addView(row1)
 
             // Dòng phụ: Chi tiết kết nối
-            val subDetails = when (p.connType) {
+            val connectionDetails = when (p.connType) {
                 POSConnect.DEVICE_TYPE_ETHERNET -> {
                     val macInfo = if (!p.mac.isNullOrBlank()) "MAC: ${p.mac}" else "Nhập tay (Không có MAC)"
-                    "LAN: ${p.lastIp}:${p.port} | $macInfo | Khổ: ${p.paperWidth}mm"
+                    "LAN: ${p.lastIp}:${p.port} | $macInfo"
                 }
-                POSConnect.DEVICE_TYPE_BLUETOOTH -> "Bluetooth: ${p.btMac} | Khổ: ${p.paperWidth}mm"
-                POSConnect.DEVICE_TYPE_USB -> "USB OTG: ${p.usbPath} | Khổ: ${p.paperWidth}mm"
-                else -> "Giao tiếp khác | Khổ: ${p.paperWidth}mm"
+                POSConnect.DEVICE_TYPE_BLUETOOTH -> "Bluetooth: ${p.btMac}"
+                POSConnect.DEVICE_TYPE_USB -> "USB OTG: ${p.usbPath}"
+                else -> "Giao tiếp khác"
             }
+            val labelSizes = listOf(40 to 30, 30 to 40, 50 to 30, 60 to 40, 100 to 150)
+            val assignedPrint = when (p.printKind) {
+                1 -> "Mặc định: Tem ${labelSizes[p.labelSize.coerceIn(0, 4)].first} × ${labelSizes[p.labelSize.coerceIn(0, 4)].second} mm${if (p.labelType == 1) " · đôi" else ""}"
+                0 -> "Mặc định: Hóa đơn K${p.paperWidth}"
+                else -> "Chưa gán loại in · Hóa đơn K${p.paperWidth}"
+            }
+            val subDetails = "$connectionDetails\n$assignedPrint"
 
             val tvSub = TextView(activity).apply {
                 text = subDetails
@@ -195,6 +202,7 @@ object ManagePrintersPage {
                 text = "Khổ ${p.paperWidth}mm"
                 textSize = 11f
                 isAllCaps = false
+                visibility = if (p.printKind == 1) View.GONE else View.VISIBLE
                 setOnClickListener {
                     p.paperWidth = if (p.paperWidth == 58) 80 else 58
                     PrinterStore.saveOrUpdate(p)
@@ -213,6 +221,82 @@ object ManagePrintersPage {
                     PrinterStore.setActivePrinter(p.id)
                     activity.applySavedPrinter(p)
                     activity.sendPrintData("In thử ${p.name}", activity.getReceiptDemoBytes())
+                }
+            }
+
+            val btnAssignPrint = activity.styleButton(Button(activity), primary = false).apply {
+                text = "Gán loại / khổ in"
+                textSize = 11f
+                isAllCaps = false
+                setOnClickListener {
+                    val dialogContent = LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(20), dp(8), dp(20), 0)
+                    }
+                    fun addCaption(text: String) {
+                        dialogContent.addView(TextView(activity).apply {
+                            this.text = text
+                            textSize = 13f
+                            setTextColor(0xFF616161.toInt())
+                            setPadding(0, dp(8), 0, dp(2))
+                        })
+                    }
+                    val kindSpinner = Spinner(activity).apply {
+                        adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, listOf("Hóa đơn", "Tem nhãn"))
+                        setSelection(if (p.printKind == 1) 1 else 0)
+                    }
+                    val sizeSpinner = Spinner(activity)
+                    val labelTypeSpinner = Spinner(activity).apply {
+                        adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, listOf("Tem đơn", "Tem đôi"))
+                        setSelection(p.labelType.coerceIn(0, 1))
+                    }
+                    addCaption("Loại in mặc định cho máy này")
+                    dialogContent.addView(kindSpinner)
+                    addCaption("Khổ giấy")
+                    dialogContent.addView(sizeSpinner)
+                    val labelTypeCaption = TextView(activity).apply {
+                        text = "Kiểu tem"
+                        textSize = 13f
+                        setTextColor(0xFF616161.toInt())
+                        setPadding(0, dp(8), 0, dp(2))
+                    }
+                    dialogContent.addView(labelTypeCaption)
+                    dialogContent.addView(labelTypeSpinner)
+
+                    fun updateSizeOptions() {
+                        val labelMode = kindSpinner.selectedItemPosition == 1
+                        val options = if (labelMode) {
+                            labelSizes.map { "${it.first} × ${it.second} mm" }
+                        } else listOf("K58 · 58 mm", "K80 · 80 mm")
+                        sizeSpinner.adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, options)
+                        sizeSpinner.setSelection(if (labelMode) p.labelSize.coerceIn(0, 4) else if (p.paperWidth >= 80) 1 else 0)
+                        labelTypeCaption.visibility = if (labelMode) View.VISIBLE else View.GONE
+                        labelTypeSpinner.visibility = if (labelMode) View.VISIBLE else View.GONE
+                    }
+                    kindSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+                        override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = updateSizeOptions()
+                    }
+                    updateSizeOptions()
+
+                    AlertDialog.Builder(activity)
+                        .setTitle("Gán loại in · ${p.name}")
+                        .setView(dialogContent)
+                        .setNegativeButton("Hủy", null)
+                        .setPositiveButton("Lưu") { _, _ ->
+                            p.printKind = kindSpinner.selectedItemPosition
+                            if (p.printKind == 0) {
+                                p.paperWidth = if (sizeSpinner.selectedItemPosition == 1) 80 else 58
+                            } else {
+                                p.labelSize = sizeSpinner.selectedItemPosition.coerceIn(0, 4)
+                                p.labelType = labelTypeSpinner.selectedItemPosition.coerceIn(0, 1)
+                            }
+                            PrinterStore.saveOrUpdate(p)
+                            log("Đã gán ${if (p.printKind == 0) "hóa đơn K${p.paperWidth}" else "tem ${labelSizes[p.labelSize].first} × ${labelSizes[p.labelSize].second} mm"} cho ${p.name}.")
+                            container.removeAllViews()
+                            buildView(activity, container, sendPrintData, log)
+                        }
+                        .show()
                 }
             }
 
@@ -267,6 +351,7 @@ object ManagePrintersPage {
             addAction(primaryActions, btnUse)
             addAction(primaryActions, btnTest)
             addAction(primaryActions, btnPaper)
+            addAction(secondaryActions, btnAssignPrint)
             addAction(secondaryActions, btnRename)
             addAction(secondaryActions, btnDelete)
             actionRows.addView(primaryActions)

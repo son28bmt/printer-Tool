@@ -1,6 +1,10 @@
 package com.example.xptool
 
 import android.app.AlertDialog
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -20,6 +24,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 private data class PrintSetupOrderItem(
     val name: String,
@@ -31,6 +37,96 @@ private data class PrintSetupOrderItem(
 }
 
 private data class PrintSetupReceiptLine(val text: String, val alignment: Int = 0)
+
+/** Draws a label at the selected physical ratio and follows the same element positions as TSPL output. */
+private class PrintSetupLabelPreview(context: Context) : View(context) {
+    private val density = context.resources.displayMetrics.density
+    private val paperPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(205, 215, 208)
+        style = Paint.Style.STROKE
+        strokeWidth = density
+    }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(25, 32, 28)
+        typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
+    }
+    private val barPaint = Paint().apply { color = Color.BLACK }
+    private val dividerPaint = Paint().apply { color = Color.LTGRAY; strokeWidth = density }
+    private var labelWidthMm = 40
+    private var labelHeightMm = 30
+    private var doubleLabel = false
+    private var title = ""
+    private var note = ""
+    private var code = ""
+
+    fun setContent(widthMm: Int, heightMm: Int, isDouble: Boolean, title: String, note: String, code: String) {
+        labelWidthMm = widthMm
+        labelHeightMm = heightMm
+        doubleLabel = isDouble
+        this.title = title
+        this.note = note
+        this.code = code
+        contentDescription = "Label ${if (isDouble) "double" else "single"}, ${widthMm} by ${heightMm} mm: $title, $note, $code"
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val count = if (doubleLabel) 2 else 1
+        val physicalWidth = labelWidthMm.toFloat() * count
+        val scale = min(width.toFloat() / physicalWidth.coerceAtLeast(1f), height.toFloat() / labelHeightMm.coerceAtLeast(1))
+        val labelW = labelWidthMm * scale
+        val labelH = labelHeightMm * scale
+        val left = (width - labelW * count) / 2f
+        val top = (height - labelH) / 2f
+
+        repeat(count) { index ->
+            val x = left + index * labelW
+            val rect = android.graphics.RectF(x, top, x + labelW, top + labelH)
+            val radius = 2f * density
+            canvas.drawRoundRect(rect, radius, radius, paperPaint)
+            canvas.drawRoundRect(rect, radius, radius, borderPaint)
+            if (index == 1) canvas.drawLine(x, top, x, top + labelH, dividerPaint)
+
+            val pad = labelW / labelWidthMm.coerceAtLeast(1).toFloat() // TSPL starts text/barcode 1 mm from the left edge.
+            val usableWidth = (labelW - pad * 2).coerceAtLeast(1f)
+            textPaint.textSize = (labelW * 0.095f).coerceIn(8f * density, 18f * density)
+            drawFittedText(canvas, title, x + pad, top + labelH * 0.20f, usableWidth)
+
+            textPaint.textSize = (labelW * 0.075f).coerceIn(7f * density, 15f * density)
+            drawFittedText(canvas, note, x + pad, top + labelH * 0.32f, usableWidth)
+
+            val barcodeTop = top + labelH * 0.58f
+            val barcodeBottom = top + labelH * 0.88f
+            drawPreviewBarcode(canvas, x + pad, barcodeTop, usableWidth, barcodeBottom - barcodeTop)
+            textPaint.textSize = (labelW * 0.075f).coerceIn(7f * density, 14f * density)
+            drawFittedText(canvas, code, x + pad, min(top + labelH * 0.98f, barcodeBottom + textPaint.textSize * 1.25f), usableWidth)
+        }
+    }
+
+    private fun drawFittedText(canvas: Canvas, value: String, x: Float, baseline: Float, maxWidth: Float) {
+        if (value.isBlank()) return
+        val cleaned = value.replace('\n', ' ').trim()
+        var shown = cleaned
+        while (shown.isNotEmpty() && textPaint.measureText(shown) > maxWidth) shown = shown.dropLast(1)
+        if (shown.length < cleaned.length && shown.length > 1) shown = shown.dropLast(1) + "…"
+        canvas.drawText(shown, x, baseline, textPaint)
+    }
+
+    private fun drawPreviewBarcode(canvas: Canvas, left: Float, top: Float, barWidth: Float, barHeight: Float) {
+        val pattern = intArrayOf(2, 1, 1, 3, 1, 2, 3, 1, 2, 1, 1, 2, 2, 3, 1, 1, 3, 2, 1, 2, 1, 3, 2, 1)
+        val total = pattern.sum().toFloat()
+        var x = left
+        var draw = true
+        pattern.forEach { unit ->
+            val segmentWidth = barWidth * unit / total
+            if (draw) canvas.drawRect(x, top, x + segmentWidth * 0.78f, top + barHeight, barPaint)
+            x += segmentWidth
+            draw = !draw
+        }
+    }
+}
 
 private data class PrintSetupProductEditor(
     val name: EditText,
@@ -166,25 +262,27 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@spinnerListener
         PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
     }
+    fun applySavedPrintAssignment(printer: SavedPrinter, config: JSONObject) {
+        val kind = printer.printKind.takeIf { it in 0..1 } ?: config.optInt("kind", 0).coerceIn(0, 1)
+        kindPicker.setSelection(kind)
+        // Paper width belongs to the saved printer so switching devices restores its own roll size.
+        billWidthPicker.setSelection(if (printer.paperWidth >= 80) 1 else 0)
+        labelSizePicker.setSelection(if (printer.printKind >= 0) printer.labelSize.coerceIn(0, 4) else config.optInt("labelSize", 0).coerceIn(0, 4))
+        labelTypePicker.setSelection(if (printer.printKind >= 0) printer.labelType.coerceIn(0, 1) else config.optInt("labelType", 0).coerceIn(0, 1))
+        updateTypeChoices()
+    }
     printerPicker.onItemSelectedListener = spinnerListener {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@spinnerListener
         refreshTemplates(printer)
         val config = selectedTemplate(printer)?.config ?: JSONObject()
-        billWidthPicker.setSelection(if (config.optInt("paperWidth", printer.paperWidth) >= 80) 1 else 0)
-        kindPicker.setSelection(config.optInt("kind", 0).coerceIn(0, 1))
-        labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
-        labelTypePicker.setSelection(config.optInt("labelType", 0).coerceIn(0, 1))
-        updateTypeChoices()
+        applySavedPrintAssignment(printer, config)
     }
     printerPicker.post {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition)
         if (printer != null) {
             refreshTemplates(printer)
             val config = selectedTemplate(printer)?.config ?: JSONObject()
-            billWidthPicker.setSelection(if (config.optInt("paperWidth", printer.paperWidth) >= 80) 1 else 0)
-            kindPicker.setSelection(config.optInt("kind", 0).coerceIn(0, 1))
-            labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
-            labelTypePicker.setSelection(config.optInt("labelType", 0).coerceIn(0, 1))
+            applySavedPrintAssignment(printer, config)
         }
         updateTypeChoices()
     }
@@ -353,8 +451,12 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         gravity = Gravity.START
         styleCard(this)
     }
+    val labelPreview = PrintSetupLabelPreview(this).apply { visibility = View.GONE }
+    val previewHost = column().apply { gravity = Gravity.CENTER_HORIZONTAL }
     designConfig.addView(label("Xem trước", 15f, true))
-    designConfig.addView(preview)
+    previewHost.addView(preview)
+    previewHost.addView(labelPreview)
+    designConfig.addView(previewHost)
 
     fun currentPreview(): String {
         if (kindPicker.selectedItemPosition == 1) {
@@ -381,7 +483,40 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     }
 
     fun refreshPreview() {
-        preview.text = currentPreview()
+        if (kindPicker.selectedItemPosition == 1) {
+            val (labelWidthMm, labelHeightMm) = labelDimensions(labelSizePicker.selectedItemPosition)
+            val isDouble = labelTypePicker.selectedItemPosition == 1
+            val mediaWidthMm = if (isDouble) labelWidthMm * 2 else labelWidthMm
+            val maxWidthPx = min(dp(340), (resources.displayMetrics.widthPixels - dp(48)).coerceAtLeast(dp(180)))
+            val maxHeightPx = dp(420)
+            val scale = min(maxWidthPx.toFloat() / mediaWidthMm, maxHeightPx.toFloat() / labelHeightMm)
+            val previewWidthPx = (mediaWidthMm * scale).roundToInt().coerceAtLeast(dp(120))
+            val previewHeightPx = (labelHeightMm * scale).roundToInt().coerceAtLeast(dp(120))
+            preview.visibility = View.GONE
+            labelPreview.visibility = View.VISIBLE
+            labelPreview.setContent(
+                labelWidthMm,
+                labelHeightMm,
+                isDouble,
+                labelTitle.text.toString(),
+                labelNote.text.toString(),
+                labelCode.text.toString()
+            )
+            labelPreview.layoutParams = LinearLayout.LayoutParams(previewWidthPx, previewHeightPx).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(6)
+            }
+        } else {
+            preview.visibility = View.VISIBLE
+            labelPreview.visibility = View.GONE
+            preview.text = currentPreview()
+            preview.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(6) }
+            preview.setPadding(dp(12), dp(12), dp(12), dp(12))
+            preview.textSize = 12f
+        }
     }
     refreshPreviewAction = ::refreshPreview
     var updatePrintButtonLabel: () -> Unit = {}
@@ -446,10 +581,14 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         selected.config = JSONObject(config.toString())
         set.selectedId = selected.id
         PrintSetupTemplateStore.save(savedTemplates, printer.id, set)
+        printer.printKind = kindPicker.selectedItemPosition
         if (kindPicker.selectedItemPosition == 0) {
             printer.paperWidth = if (billWidthPicker.selectedItemPosition == 1) 80 else 58
-            PrinterStore.saveOrUpdate(printer)
+        } else {
+            printer.labelSize = labelSizePicker.selectedItemPosition.coerceIn(0, 4)
+            printer.labelType = labelTypePicker.selectedItemPosition.coerceIn(0, 1)
         }
+        PrinterStore.saveOrUpdate(printer)
         log("Đã lưu thiết lập in cho ${printer.name}.")
     }
 
