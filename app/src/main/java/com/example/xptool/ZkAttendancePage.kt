@@ -13,7 +13,7 @@ import java.util.Locale
 internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua Wi-Fi/LAN", false) { body ->
     val activity = this
     val prefs = getSharedPreferences("zk_attendance", Context.MODE_PRIVATE)
-    val brands = listOf("ZKTeco", "Hikvision ISAPI", "Dahua CGI", "Tự nhận diện hãng hỗ trợ")
+    val brands = listOf("ZKTeco", "Hikvision ISAPI", "Dahua CGI", "Tự nhận diện hãng hỗ trợ", "Ronald Jack RJ3030 (ZK)")
     if (!prefs.getBoolean("port_defaults_corrected", false)) {
         prefs.edit()
             .putInt("port_0", if (prefs.getInt("port_0", 4370) == 80) 4370 else prefs.getInt("port_0", 4370))
@@ -29,8 +29,13 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
         setSelection(savedBrand)
     }
     body.addView(brandPicker)
+    val rj3030Hint = label("RJ3030 được thử bằng giao thức ZK trên cổng 4370; khả năng tương thích có thể tùy firmware từng máy.", 12f).apply {
+        setTextColor(colorMuted)
+        visibility = View.GONE
+    }
+    body.addView(rj3030Hint)
     val ipField = edit("IP máy chấm công", prefs.getString("ip", "") ?: "", InputType.TYPE_CLASS_TEXT)
-    val defaultPort = if (savedBrand == 0) 4370 else 80
+    val defaultPort = if (savedBrand == 0 || savedBrand == 4) 4370 else 80
     val portField = edit("Cổng TCP", prefs.getInt("port_$savedBrand", defaultPort).toString(), InputType.TYPE_CLASS_NUMBER)
     val keyField = edit("Khóa giao tiếp (để 0 nếu máy không đặt)", "0", InputType.TYPE_CLASS_NUMBER)
     body.addView(label("Điện thoại và máy chấm công cần ở cùng mạng Wi‑Fi/LAN. Chức năng này chỉ đọc bản ghi, không xóa dữ liệu trên máy.", 13f).apply {
@@ -43,9 +48,10 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
     body.addView(userField)
     body.addView(passwordField)
     fun updateBrandFields(index: Int) {
-        keyField.visibility = if (index == 0) View.VISIBLE else View.GONE
+        keyField.visibility = if (index == 0 || index == 4) View.VISIBLE else View.GONE
         userField.visibility = if (index == 1 || index == 2) View.VISIBLE else View.GONE
         passwordField.visibility = if (index == 1 || index == 2) View.VISIBLE else View.GONE
+        rj3030Hint.visibility = if (index == 4) View.VISIBLE else View.GONE
     }
     var activeBrand = savedBrand
     updateBrandFields(brandPicker.selectedItemPosition)
@@ -53,9 +59,9 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
         override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
         override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
             if (position != activeBrand) {
-                prefs.edit().putInt("port_$activeBrand", portField.text.toString().toIntOrNull() ?: if (activeBrand == 0) 4370 else 80).apply()
+                prefs.edit().putInt("port_$activeBrand", portField.text.toString().toIntOrNull() ?: if (activeBrand == 0 || activeBrand == 4) 4370 else 80).apply()
                 activeBrand = position
-                val nextDefault = if (position == 0) 4370 else 80
+                val nextDefault = if (position == 0 || position == 4) 4370 else 80
                 portField.setText(prefs.getInt("port_$position", nextDefault).toString())
                 updateBrandFields(position)
             }
@@ -125,7 +131,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
             )
             return@setOnClickListener
         }
-        val brandDefaultPort = if (brandIndex == 0) 4370 else 80
+        val brandDefaultPort = if (brandIndex == 0 || brandIndex == 4) 4370 else 80
         val scanPort = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: brandDefaultPort
         val httpProbePath = when (brandIndex) {
             1 -> "/ISAPI/System/deviceInfo"
@@ -140,7 +146,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
         cancelScan = ZkAttendanceReader.scanNetwork(
             prefix = prefix,
             port = scanPort,
-            requireZkResponse = brandIndex == 0,
+            requireZkResponse = brandIndex == 0 || brandIndex == 4,
             httpProbePath = httpProbePath,
             onFound = { foundIp ->
                 found.add(foundIp)
@@ -191,7 +197,7 @@ internal fun MainActivity.pageZkAttendance() = showPage("Máy chấm công qua W
     fetchButton.setOnClickListener {
         val ip = ipField.text.toString().trim()
         val brandIndex = brandPicker.selectedItemPosition
-        val brandDefaultPort = if (brandIndex == 0) 4370 else 80
+        val brandDefaultPort = if (brandIndex == 0 || brandIndex == 4) 4370 else 80
         val port = portField.text.toString().trim().toIntOrNull() ?: brandDefaultPort
         val key = keyField.text.toString().trim().toIntOrNull() ?: 0
         if (ip.isBlank()) {
