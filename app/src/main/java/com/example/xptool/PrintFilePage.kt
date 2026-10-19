@@ -10,10 +10,20 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.text.InputType
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.roundToInt
 
-private data class PrintArea(val widthPx: Int, val heightPx: Int?, val marginPx: Int)
+private data class PrintArea(
+    val widthPx: Int,
+    val heightPx: Int?,
+    val marginPx: Int,
+    val sizeLabel: String,
+    val marginMm: Float
+)
+
+private fun formatPrintMillimeters(value: Float): String =
+    if (value % 1f == 0f) value.toInt().toString() else String.format(Locale.US, "%.1f", value)
 
 private val printAreaOptions = listOf(
     "Cuộn K58 · vùng in ~48 mm",
@@ -125,7 +135,9 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
         val width = (widthMm * mmToDots).roundToInt().coerceAtLeast(1)
         val height = heightMm?.let { (it * mmToDots).roundToInt().coerceAtLeast(1) }
         val margin = (marginMm * mmToDots).roundToInt().coerceAtLeast(0).coerceAtMost((width - 1) / 2)
-        return PrintArea(width, height, margin)
+        val sizeLabel = heightMm?.let { "${formatPrintMillimeters(widthMm)} × ${formatPrintMillimeters(it)} mm" }
+            ?: "cuộn ${formatPrintMillimeters(widthMm)} mm"
+        return PrintArea(width, height, margin, sizeLabel, marginMm)
     }
 
     fun renderPage(fileUri: Uri, pageIndex: Int, area: PrintArea): Bitmap? = try {
@@ -158,7 +170,7 @@ internal fun MainActivity.pagePrintFiles(uri: Uri? = null, mimeType: String? = n
                 shownBitmap = bitmap
                 preview.setImageBitmap(bitmap)
                 if (oldBitmap != null && oldBitmap !== bitmap && !oldBitmap.isRecycled) oldBitmap.recycle()
-                info.text = if (bitmap == null) "Không dựng được xem trước. Kiểm tra tệp rồi thử lại." else "Vùng in: ${area.widthPx} × ${bitmap.height}px (ước lượng dot); nội dung đã căn giữa và chuyển đen trắng."
+                info.text = if (bitmap == null) "Không dựng được xem trước. Kiểm tra tệp rồi thử lại." else "Khổ chọn: ${area.sizeLabel} · raster ${area.widthPx} × ${bitmap.height} dot (ước lượng 203 dpi), lề ${formatPrintMillimeters(area.marginMm)} mm."
             }
         }
     }
