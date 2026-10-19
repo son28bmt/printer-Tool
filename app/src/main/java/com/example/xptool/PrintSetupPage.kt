@@ -25,7 +25,7 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         return@showPage
     }
 
-    val savedTemplates = getSharedPreferences("print_setup_templates", MODE_PRIVATE)
+    val savedTemplates = getSharedPreferences("print_setup_templates", android.content.Context.MODE_PRIVATE)
     val names = printers.map { "${it.name} · ${if (it.connectType == POSConnect.DEVICE_TYPE_ETHERNET) "${it.lastIp}:${it.port}" else connTypeFor(it)}" }
     val printerPicker = Spinner(this).apply {
         adapter = ArrayAdapter(this@pagePrintSetup, android.R.layout.simple_spinner_dropdown_item, names)
