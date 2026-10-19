@@ -17,6 +17,25 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private data class PrintSetupOrderItem(
+    val name: String,
+    val quantity: Long,
+    val unitPrice: Long
+) {
+    val subtotal: Long
+        get() = if (quantity > 0 && unitPrice > Long.MAX_VALUE / quantity) Long.MAX_VALUE else quantity * unitPrice
+}
+
+private data class PrintSetupReceiptLine(val text: String, val alignment: Int = 0)
+
+private data class PrintSetupProductEditor(
+    val name: EditText,
+    val quantity: EditText,
+    val unitPrice: EditText,
+    val amountView: TextView,
+    val card: View
+)
+
 internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử", false) { body ->
     val printers = PrinterManager.savedPrinters.toList()
     if (printers.isEmpty()) {
@@ -90,7 +109,97 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     val shopAddress = edit("Địa chỉ", "Địa chỉ cửa hàng")
     val documentTitle = edit("Tiêu đề hóa đơn", "HÓA ĐƠN BÁN HÀNG")
     val footer = edit("Lời nhắn cuối hóa đơn", "Cảm ơn quý khách!")
-    listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach { designConfig.addView(it) }
+    val billFields = column()
+    listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach { billFields.addView(it) }
+
+    val productEditors = mutableListOf<PrintSetupProductEditor>()
+    val productRows = column()
+    val discountMode = spinner(listOf("Giảm số tiền (đ)", "Giảm theo phần trăm (%)"))
+    val discountValue = edit("Giảm giá", "0", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+    val grossTotalView = label("Tạm tính: 0đ", 13f, true)
+    val discountTotalView = label("Giảm giá: 0đ", 13f)
+    val finalTotalView = label("Tổng thanh toán: 0đ", 15f, true)
+    var refreshPreviewAction: () -> Unit = {}
+
+    fun parsedProducts(): List<PrintSetupOrderItem> = productEditors.mapNotNull { editor ->
+        val name = editor.name.text.toString().trim()
+        val quantity = editor.quantity.text.toString().toLongOrNull() ?: 0L
+        val unitPrice = editor.unitPrice.text.toString().toLongOrNull() ?: 0L
+        if (name.isBlank() || quantity <= 0L || unitPrice < 0L) null
+        else PrintSetupOrderItem(name, quantity, unitPrice)
+    }
+
+    fun updateOrderSummary() {
+        val products = parsedProducts()
+        productEditors.forEach { editor ->
+            val quantity = editor.quantity.text.toString().toLongOrNull() ?: 0L
+            val unitPrice = editor.unitPrice.text.toString().toLongOrNull() ?: 0L
+            val subtotal = if (quantity > 0L && unitPrice > Long.MAX_VALUE / quantity) Long.MAX_VALUE else quantity * unitPrice
+            editor.amountView.text = "Thành tiền: ${formatPrintMoney(subtotal)}"
+        }
+        val gross = products.fold(0L) { total, item -> addPrintMoney(total, item.subtotal) }
+        val discount = calculatePrintDiscount(gross, discountValue.text.toString(), discountMode.selectedItemPosition)
+        grossTotalView.text = "Tạm tính: ${formatPrintMoney(gross)}"
+        discountTotalView.text = "Giảm giá: ${formatPrintMoney(discount)}"
+        finalTotalView.text = "Tổng thanh toán: ${formatPrintMoney(gross - discount)}"
+        refreshPreviewAction()
+    }
+
+    fun addProductRow() {
+        val card = column().apply {
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            styleCard(this)
+        }
+        val name = edit("Tên sản phẩm")
+        val quantity = edit("SL", "1", InputType.TYPE_CLASS_NUMBER)
+        val unitPrice = edit("Đơn giá", "0", InputType.TYPE_CLASS_NUMBER)
+        val amountView = label("Thành tiền: 0đ", 12f, true)
+        lateinit var editor: PrintSetupProductEditor
+        card.addView(row(label("Mặt hàng", 13f, true) to 1f, btn("Xóa") {
+            productEditors.remove(editor)
+            productRows.removeView(card)
+            updateOrderSummary()
+        } to 0.55f))
+        card.addView(name)
+        card.addView(row(quantity to 0.8f, unitPrice to 1.2f))
+        card.addView(amountView)
+        editor = PrintSetupProductEditor(name, quantity, unitPrice, amountView, card)
+        productEditors.add(editor)
+        productRows.addView(card)
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateOrderSummary()
+            override fun afterTextChanged(s: Editable?) = Unit
+        }
+        name.addTextChangedListener(watcher)
+        quantity.addTextChangedListener(watcher)
+        unitPrice.addTextChangedListener(watcher)
+        updateOrderSummary()
+    }
+
+    billFields.addView(label("Mặt hàng trong đơn", 15f, true))
+    billFields.addView(productRows)
+    billFields.addView(btn("+ Thêm dòng") { addProductRow() })
+    billFields.addView(label("Giảm giá", 14f, true))
+    billFields.addView(row(discountMode to 1.25f, discountValue to 0.75f))
+    billFields.addView(grossTotalView)
+    billFields.addView(discountTotalView)
+    billFields.addView(finalTotalView)
+    addProductRow()
+    discountMode.onItemSelectedListener = spinnerListener {
+        discountValue.inputType = if (discountMode.selectedItemPosition == 1) {
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        } else {
+            InputType.TYPE_CLASS_NUMBER
+        }
+        updateOrderSummary()
+    }
+    discountValue.addTextChangedListener(object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateOrderSummary()
+        override fun afterTextChanged(s: Editable?) = Unit
+    })
+    designConfig.addView(billFields)
 
     val labelTitle = edit("Tên sản phẩm / nội dung tem", "SẢN PHẨM MẪU")
     val labelNote = edit("Giá hoặc ghi chú", "Giá: 35.000đ")
@@ -119,23 +228,28 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
             return "$copies\n${labelTitle.text}\n${labelNote.text}\n${labelCode.text}"
         }
         val width = if (billWidthPicker.selectedItemPosition == 1) 80 else 58
-        val lines = mutableListOf<String>()
-        lines += shopName.text.toString().ifBlank { "CỬA HÀNG" }
-        if (shopPhone.text.isNotBlank()) lines += "ĐT: ${shopPhone.text}"
-        if (shopAddress.text.isNotBlank()) lines += shopAddress.text.toString()
-        lines += "=".repeat(if (width == 58) 32 else 48)
-        lines += documentTitle.text.toString().ifBlank { "HÓA ĐƠN BÁN HÀNG" }
-        lines += SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
-        lines += "Sản phẩm mẫu        1     35.000đ"
-        lines += "=".repeat(if (width == 58) 32 else 48)
-        lines += "TỔNG TIỀN: 35.000đ"
-        if (footer.text.isNotBlank()) lines += footer.text.toString()
-        return "K$width\n" + lines.joinToString("\n")
+        val gross = parsedProducts().fold(0L) { total, item -> addPrintMoney(total, item.subtotal) }
+        val discount = calculatePrintDiscount(gross, discountValue.text.toString(), discountMode.selectedItemPosition)
+        val lines = PrintSetupTemplates.billLines(
+            width = width,
+            shopName = shopName.text.toString(),
+            phone = shopPhone.text.toString(),
+            address = shopAddress.text.toString(),
+            title = documentTitle.text.toString(),
+            footer = footer.text.toString(),
+            items = parsedProducts(),
+            gross = gross,
+            discount = discount,
+            removeAccents = ::removeAccents
+        )
+        return "K$width\n" + lines.joinToString("\n") { it.text }
     }
 
     fun refreshPreview() {
         preview.text = currentPreview()
     }
+    refreshPreviewAction = ::refreshPreview
+    var updatePrintButtonLabel: () -> Unit = {}
     val watcher = object : TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = refreshPreview()
@@ -146,7 +260,8 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
     kindPicker.onItemSelectedListener = spinnerListener {
         updateTypeChoices()
         labelFields.visibility = if (kindPicker.selectedItemPosition == 1) View.VISIBLE else View.GONE
-        listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach { it.visibility = if (kindPicker.selectedItemPosition == 0) View.VISIBLE else View.GONE }
+        billFields.visibility = if (kindPicker.selectedItemPosition == 0) View.VISIBLE else View.GONE
+        updatePrintButtonLabel()
         refreshPreview()
     }
 
@@ -165,7 +280,7 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         labelSizePicker.setSelection(config.optInt("labelSize", 0).coerceIn(0, 4))
         labelTypePicker.setSelection(config.optInt("labelType", 0).coerceIn(0, 1))
         labelFields.visibility = if (kindPicker.selectedItemPosition == 1) View.VISIBLE else View.GONE
-        listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach { it.visibility = if (kindPicker.selectedItemPosition == 0) View.VISIBLE else View.GONE }
+        billFields.visibility = if (kindPicker.selectedItemPosition == 0) View.VISIBLE else View.GONE
         refreshPreview()
     }
 
@@ -191,16 +306,24 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         log("Đã lưu thiết lập in cho ${printer.name}.")
     }
 
-    val saveButton = btn("Lưu thiết kế") {
+    val saveButton = btn("Lưu làm mẫu") {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@btn
         saveConfig(printer)
     }
-    val printButton = btn("In thử") {
+    val printButton = btn(if (kindPicker.selectedItemPosition == 0) "In hóa đơn này" else "In thử tem") {
         val printer = printers.getOrNull(printerPicker.selectedItemPosition) ?: return@btn
+        val isBill = kindPicker.selectedItemPosition == 0
+        val items = if (isBill) parsedProducts() else emptyList()
+        if (isBill && items.isEmpty()) {
+            log("Hãy nhập ít nhất một mặt hàng có tên và số lượng lớn hơn 0 trước khi in.")
+            return@btn
+        }
         saveConfig(printer)
         PrinterManager.setActivePrinter(this@pagePrintSetup, printer.id)
         applySavedPrinter(printer)
-        val data = if (kindPicker.selectedItemPosition == 0) {
+        val data = if (isBill) {
+            val gross = items.fold(0L) { total, item -> addPrintMoney(total, item.subtotal) }
+            val discount = calculatePrintDiscount(gross, discountValue.text.toString(), discountMode.selectedItemPosition)
             PrintSetupTemplates.bill(
                 width = if (billWidthPicker.selectedItemPosition == 1) 80 else 58,
                 shopName = shopName.text.toString(),
@@ -208,6 +331,9 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
                 address = shopAddress.text.toString(),
                 title = documentTitle.text.toString(),
                 footer = footer.text.toString(),
+                items = items,
+                gross = gross,
+                discount = discount,
                 removeAccents = ::removeAccents,
                 commandBytes = { values -> bytes(*values) }
             )
@@ -223,8 +349,12 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
                 removeAccents = ::removeAccents
             )
         }
-        sendPrintData(if (kindPicker.selectedItemPosition == 0) "In thử hóa đơn K${printer.paperWidth}" else "In thử tem TSPL", data)
+        sendPrintData(if (isBill) "In hóa đơn K${printer.paperWidth}" else "In thử tem TSPL", data)
     }
+    updatePrintButtonLabel = {
+        printButton.text = if (kindPicker.selectedItemPosition == 0) "In hóa đơn này" else "In thử tem"
+    }
+    updatePrintButtonLabel()
     designConfig.addView(row(saveButton to 1f, printButton to 1f))
     setupPanel.addView(designConfig)
 
@@ -242,9 +372,7 @@ internal fun MainActivity.pagePrintSetup() = showPage("Thiết lập & in thử"
         labelTypePicker.setSelection(chosenLabelType)
         updateTypeChoices()
         labelFields.visibility = if (chosenKind == 1) View.VISIBLE else View.GONE
-        listOf(shopName, shopPhone, shopAddress, documentTitle, footer).forEach {
-            it.visibility = if (chosenKind == 0) View.VISIBLE else View.GONE
-        }
+        billFields.visibility = if (chosenKind == 0) View.VISIBLE else View.GONE
         refreshPreview()
         selectionPanel.visibility = View.GONE
         continueButton.visibility = View.GONE
@@ -281,6 +409,50 @@ private fun connTypeFor(printer: SavedPrinter) = when (printer.connectType) {
     else -> "LAN/Wi-Fi"
 }
 
+private fun formatPrintMoney(amount: Long): String = String.format(Locale.US, "%,dđ", amount.coerceAtLeast(0L))
+
+private fun addPrintMoney(left: Long, right: Long): Long =
+    if (right > 0L && left > Long.MAX_VALUE - right) Long.MAX_VALUE else left + right
+
+private fun calculatePrintDiscount(gross: Long, rawValue: String, mode: Int): Long {
+    if (gross <= 0L) return 0L
+    return if (mode == 1) {
+        val percent = rawValue.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
+        if (percent <= 0.0) 0L else if (percent >= 100.0) gross else (gross.toDouble() * percent / 100.0).toLong().coerceIn(0L, gross)
+    } else {
+        (rawValue.toLongOrNull() ?: 0L).coerceIn(0L, gross)
+    }
+}
+
+private fun wrapPrintText(text: String, columns: Int): List<String> {
+    if (text.isEmpty()) return emptyList()
+    val result = mutableListOf<String>()
+    var line = StringBuilder()
+    for (word in text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }) {
+        if (word.length > columns) {
+            if (line.isNotEmpty()) {
+                result += line.toString()
+                line = StringBuilder()
+            }
+            var remaining = word
+            while (remaining.length > columns) {
+                result += remaining.take(columns)
+                remaining = remaining.drop(columns)
+            }
+            if (remaining.isNotEmpty()) line.append(remaining)
+        } else if (line.isEmpty()) {
+            line.append(word)
+        } else if (line.length + 1 + word.length <= columns) {
+            line.append(' ').append(word)
+        } else {
+            result += line.toString()
+            line = StringBuilder(word)
+        }
+    }
+    if (line.isNotEmpty()) result += line.toString()
+    return result
+}
+
 private object PrintSetupTemplates {
     fun bill(
         width: Int,
@@ -289,34 +461,73 @@ private object PrintSetupTemplates {
         address: String,
         title: String,
         footer: String,
+        items: List<PrintSetupOrderItem>,
+        gross: Long,
+        discount: Long,
         removeAccents: (String) -> String,
         commandBytes: (IntArray) -> ByteArray
     ): ByteArray {
-        val columns = if (width <= 58) 32 else 48
         val out = ByteArrayOutputStream()
-        fun text(value: String) = out.write(removeAccents(value).toByteArray(Charsets.US_ASCII))
-        fun line(value: String) = text(value.take(columns) + "\n")
         out.write(commandBytes(intArrayOf(0x1B, 0x40)))
-        out.write(commandBytes(intArrayOf(0x1B, 0x61, 0x01)))
-        out.write(commandBytes(intArrayOf(0x1D, 0x21, 0x01)))
-        line(shopName.ifBlank { "CỬA HÀNG" })
-        out.write(commandBytes(intArrayOf(0x1D, 0x21, 0x00)))
-        if (phone.isNotBlank()) line("ĐT: $phone")
-        if (address.isNotBlank()) line(address)
-        line("-".repeat(columns))
-        line(title.ifBlank { "HÓA ĐƠN BÁN HÀNG" })
-        line(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date()))
-        out.write(commandBytes(intArrayOf(0x1B, 0x61, 0x00)))
-        line("Sản phẩm mẫu                  1")
-        line("Đơn giá: 35.000đ")
-        line("-".repeat(columns))
-        out.write(commandBytes(intArrayOf(0x1B, 0x61, 0x02)))
-        line("TỔNG TIỀN: 35.000đ")
-        out.write(commandBytes(intArrayOf(0x1B, 0x61, 0x01)))
-        if (footer.isNotBlank()) line(footer)
-        text("\n\n\n")
+        var currentAlignment = -1
+        billLines(width, shopName, phone, address, title, footer, items, gross, discount, removeAccents).forEach { receiptLine ->
+            if (receiptLine.alignment != currentAlignment) {
+                out.write(commandBytes(intArrayOf(0x1B, 0x61, receiptLine.alignment)))
+                currentAlignment = receiptLine.alignment
+            }
+            out.write(receiptLine.text.toByteArray(Charsets.US_ASCII))
+            out.write(byteArrayOf('\n'.code.toByte()))
+        }
+        out.write(byteArrayOf('\n'.code.toByte(), '\n'.code.toByte(), '\n'.code.toByte()))
         out.write(commandBytes(intArrayOf(0x1D, 0x56, 0x00)))
         return out.toByteArray()
+    }
+
+    fun billLines(
+        width: Int,
+        shopName: String,
+        phone: String,
+        address: String,
+        title: String,
+        footer: String,
+        items: List<PrintSetupOrderItem>,
+        gross: Long,
+        discount: Long,
+        removeAccents: (String) -> String
+    ): List<PrintSetupReceiptLine> {
+        val columns = if (width <= 58) 32 else 48
+        val lines = mutableListOf<PrintSetupReceiptLine>()
+        fun addWrapped(value: String, alignment: Int = 0) {
+            wrapPrintText(removeAccents(value), columns).forEach { lines += PrintSetupReceiptLine(it, alignment) }
+        }
+
+        addWrapped(shopName.ifBlank { "CỬA HÀNG" }, 1)
+        if (phone.isNotBlank()) addWrapped("ĐT: $phone", 1)
+        if (address.isNotBlank()) addWrapped(address, 1)
+        lines += PrintSetupReceiptLine("-".repeat(columns))
+        addWrapped(title.ifBlank { "HÓA ĐƠN BÁN HÀNG" }, 1)
+        addWrapped(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date()), 1)
+        lines += PrintSetupReceiptLine("-".repeat(columns))
+        if (items.isEmpty()) {
+            addWrapped("Chưa có mặt hàng")
+        } else {
+            items.forEach { item ->
+                addWrapped(item.name)
+                val detail = removeAccents("${item.quantity} x ${formatPrintMoney(item.unitPrice)}")
+                val amount = removeAccents(formatPrintMoney(item.subtotal))
+                if (detail.length + amount.length + 1 <= columns) {
+                    lines += PrintSetupReceiptLine(detail.padEnd(columns - amount.length) + amount)
+                } else {
+                    addWrapped("$detail = $amount")
+                }
+            }
+        }
+        lines += PrintSetupReceiptLine("-".repeat(columns))
+        addWrapped("TẠM TÍNH: ${formatPrintMoney(gross)}", 2)
+        if (discount > 0L) addWrapped("GIẢM GIÁ: -${formatPrintMoney(discount)}", 2)
+        addWrapped("TỔNG THANH TOÁN: ${formatPrintMoney(gross - discount)}", 2)
+        if (footer.isNotBlank()) addWrapped(footer, 1)
+        return lines
     }
 
     fun label(
