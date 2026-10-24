@@ -1345,14 +1345,7 @@ class MainActivity : Activity() {
                                 } else {
                                     arrayOf(queuedBitmap, alignment, widthPx, model)
                                 }
-                                val result = bitmapMethod.invoke(printer, *args)
-                                if (bitmapMethod.returnType != Void.TYPE) {
-                                    val printTarget = result ?: printer
-                                    val printMethod = printTarget.javaClass.methods.firstOrNull {
-                                        it.name == "print" && it.parameterCount == 0
-                                    } ?: error("SDK không có lệnh print() để gửi ảnh")
-                                    printMethod.invoke(printTarget)
-                                }
+                                bitmapMethod.invoke(printer, *args) // printBitmap sends the image itself; its return is a fluent POSPrinter.
                                 Thread.sleep(1200)
                                 succeeded.set(true)
                             } catch (e: Exception) {
